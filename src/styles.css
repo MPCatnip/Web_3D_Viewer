@@ -1,0 +1,402 @@
+/* ============================================================
+   3D Viewer — styles
+   Light theme · flat · white panels · 2px grey border · pills
+   ============================================================ */
+
+:root{
+  /* Accent palette — adjust these to re-theme */
+  --accent:#389d86;
+  --slate:#495965;          /* slate / primary button */
+  --gray:#5B6770;
+  --accent-light:#59e8b1;
+
+  /* Grey scale — derived from --gray, lightening toward white */
+  --g1:color-mix(in srgb, var(--gray) 85%, white);
+  --g2:color-mix(in srgb, var(--gray) 62%, white);
+  --g3:color-mix(in srgb, var(--gray) 35%, white);
+  --g4:color-mix(in srgb, var(--gray) 17%, white);
+  /* Tint scale — derived from --accent-light, lightening toward white */
+  --tint-1:color-mix(in srgb, var(--accent-light) 55%, white);
+  --tint-2:color-mix(in srgb, var(--accent-light) 35%, white);
+  --tint-3:color-mix(in srgb, var(--accent-light) 18%, white);
+  --tint-4:color-mix(in srgb, var(--accent-light) 8%, white);
+
+  --bg:#F9FAFA;
+  --panel:#ffffff;
+  --border:#E1E3E7;
+  --border-strong:#C2C7CD;
+  --text:#2b3238;
+  --text-soft:#5B6770;
+  --text-muted:#939DA7;
+
+  --radius:14px;
+  --radius-sm:10px;
+  --shadow:0 6px 22px rgba(73,89,101,.12);
+  --shadow-sm:0 2px 8px rgba(73,89,101,.10);
+  --font:'Segoe UI',Roboto,Helvetica,Arial,system-ui,sans-serif;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden}
+body{
+  font-family:var(--font);
+  color:var(--text);
+  background:var(--bg);
+  -webkit-font-smoothing:antialiased;
+  user-select:none;
+}
+
+#viewport{position:fixed;inset:0;touch-action:none}
+#viewport canvas{display:block;outline:none}
+
+/* CSS2D label layer must not eat pointer events except on labels */
+#css2d{position:fixed;inset:0;pointer-events:none;overflow:hidden}
+
+/* ---------- generic panel ---------- */
+.panel{
+  background:var(--panel);
+  border:2px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+}
+.panel-head{
+  font-size:11px;font-weight:700;letter-spacing:.10em;text-transform:uppercase;
+  color:var(--slate);
+  padding:12px 14px 8px;
+}
+.panel-head .sub{float:right;color:var(--text-muted);font-weight:600;letter-spacing:.02em;text-transform:none}
+.divider{height:1px;background:var(--border);margin:0 12px}
+
+/* ---------- buttons ---------- */
+.btn{
+  font-family:inherit;font-size:13px;color:var(--text-soft);
+  background:var(--panel);
+  border:2px solid var(--border);
+  border-radius:10px;
+  padding:8px 14px;cursor:pointer;
+  display:inline-flex;align-items:center;gap:8px;
+  transition:.12s ease;white-space:nowrap;
+}
+.btn:hover{border-color:var(--g3);background:var(--tint-4)}
+.btn:active{transform:translateY(1px)}
+.btn.active{background:var(--tint-3);border-color:var(--accent-light);color:var(--accent)}
+.btn svg{width:16px;height:16px;flex:none}
+
+.btn-primary{
+  background:var(--slate);color:#fff;border-color:var(--slate);
+  font-weight:600;padding:9px 18px;
+  box-shadow:var(--shadow-sm);
+}
+.btn-primary:hover{background:#3c4953;border-color:#3c4953}
+#btnImport {border-radius:90px;}
+
+/* square-ish tool button used in vertical stacks */
+.vbtn{
+  font-family:inherit;font-size:11px;color:var(--text-soft);font-weight:600;
+  background:var(--panel);
+  border:2px solid var(--border);
+  display:inline-flex;align-items:center;gap:8px;
+  transition:.12s ease;white-space:nowrap;
+  width:42px;
+  height:42px;
+  border-radius:12px;
+  justify-content:center;
+  padding:0;
+}
+.vbtn:hover{border-color:var(--g3);background:var(--tint-4)}
+.vbtn:active{transform:translateY(1px)}
+.vbtn.active{background:var(--tint-3);border-color:var(--accent-light);color:var(--accent)}
+.vbtn svg{width:16px;height:16px;flex:none}
+.cube .vbtn svg{width:24px;height:24px;flex:none}
+
+/* By default, all faces are empty */
+.cube-back, .cube-front, .cube-left, .cube-right, .cube-top, .cube-bottom {fill: none;}
+
+/* Modifier classes applied to the SVG */
+/* Injecting variables straight into the shadow DOM wrapper */
+.fill-back {--back-color: var(--accent-light);}
+.fill-front {--front-color: var(--accent-light);}
+.fill-top {--top-color: var(--accent-light);}
+.fill-left {--left-color: var(--accent-light);}
+.fill-right {--right-color: var(--accent-light);}
+.fill-bottom {--bottom-color: var(--accent-light);}
+
+
+.icon-btn{
+  width:42px;height:42px;padding:0;border-radius:50%;justify-content:center;
+}
+.icon-btn.round-solid{background:var(--slate);border-color:var(--slate);color:#fff}
+.icon-btn.round-solid:hover{background:#3c4953}
+
+
+/* ---------- top bar ---------- */
+.topbar{position:fixed;top:16px;left:16px;right:16px;display:flex;justify-content:space-between;
+        align-items:flex-start;pointer-events:none;z-index:30}
+.topbar > *{pointer-events:auto}
+
+.brand{
+  display:flex;align-items:center;gap:16px;
+  background:transparent;border:none;box-shadow:none;
+  padding:6px 4px;max-width:60vw;
+}
+.brand .logo{height:40px;width:auto;display:block;filter:drop-shadow(0 1px 3px rgba(255,255,255,.7))}
+.brand .brand-name{
+  font-size:19px;font-weight:600;color:var(--slate);letter-spacing:.2px;
+  white-space:nowrap;margin-left:-6px;text-shadow:0 1px 3px rgba(255,255,255,.7);
+}
+.brand .sep{width:2px;height:30px;background:var(--border-strong);border-radius:2px;opacity:.9}
+.brand .model-name{
+  font-size:16px;font-weight:600;color:var(--text);
+  border:none;outline:none;background:transparent;
+  padding:3px 6px;border-radius:7px;min-width:60px;max-width:34vw;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  text-shadow:0 1px 3px rgba(255,255,255,.7);
+}
+.brand .model-name:hover{background:rgba(255,255,255,.55)}
+.brand .model-name:focus{background:#fff;box-shadow:inset 0 0 0 1px var(--tint-1);text-shadow:none}
+
+.topright{display:flex;gap:10px;align-items:center;position:relative}
+
+/* ---------- foldout menu (slim, dark) ---------- */
+.menu{
+  position:absolute;top:54px;right:0;width:244px;
+  background:#3e4a53;border-radius:14px;overflow:hidden;
+  box-shadow:0 14px 36px rgba(40,49,56,.40);
+  padding-bottom:8px;display:none;z-index:40;color:#fff;
+}
+.menu.open{display:block;animation:pop .12s ease}
+@keyframes pop{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.menu .panel-head{color:#c7d0d6;padding:13px 16px 8px}
+.menu .divider{background:rgba(255,255,255,.14)}
+.menu-item{
+  display:flex;flex-direction:column;gap:2px;
+  padding:10px 16px;cursor:pointer;border-left:3px solid transparent;
+}
+.menu-item:hover{background:rgba(255,255,255,.10);border-left-color:var(--accent-light)}
+.menu-item .label{font-size:13.5px;font-weight:600;color:#fff;display:flex;align-items:center;gap:9px}
+.menu-item .label svg{width:15px;height:15px;opacity:.9}
+.menu-item .desc{font-size:11px;color:#c0c9d0;padding-left:24px;line-height:1.35}
+.menu-item.danger .label{color:#f3aba7}
+.menu-sub{display:flex;gap:7px;flex-wrap:wrap;padding:4px 16px 8px}
+.menu .chip{
+  font-size:11px;font-weight:700;color:#eef2f5;
+  border:1.5px solid rgba(255,255,255,.30);border-radius:999px;padding:4px 12px;cursor:pointer;background:rgba(255,255,255,.13);
+}
+.menu .chip:hover{border-color:var(--accent-light);background:color-mix(in srgb, var(--accent-light) 22%, transparent)}
+.menu .chip.active{background:var(--accent-light);color:#243038;border-color:var(--accent-light)}
+.menu-toggle-row{display:flex;align-items:center;justify-content:space-between;padding:9px 16px;cursor:pointer}
+.menu-toggle-row:hover{background:rgba(255,255,255,.08)}
+.menu-toggle-row .label{font-size:13px;font-weight:600;color:#fff}
+/* toggle track is brighter inside the dark menu so the off-state reads */
+.menu .switch{background:rgba(255,255,255,.28)}
+.menu .switch.on{background:var(--accent)}
+
+/* generic chip (used outside the dark menu, e.g. section axes) */
+.chip{
+  font-size:11px;font-weight:600;color:var(--text-soft);
+  border:2px solid var(--border);border-radius:999px;padding:4px 12px;cursor:pointer;background:#fff;
+}
+.chip:hover{border-color:var(--tint-1);background:var(--tint-4)}
+.chip.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+/* tiny switch */
+.switch{width:38px;height:22px;border-radius:999px;background:var(--g3);position:relative;cursor:pointer;transition:.15s;flex:none}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.15s;box-shadow:var(--shadow-sm)}
+.switch.on{background:var(--accent)}
+.switch.on::after{left:18px}
+
+/* ---------- navigator (left, floating) ---------- */
+.nav{position:fixed;left:16px;bottom:100px;
+     display:flex;flex-direction:column;gap:10px;z-index:25}
+.nav .group{display:flex;flex-direction:row;gap:6px;align-items:center;}
+/*.nav .group{background:var(--panel);border:2px solid var(--border);border-radius:16px;
+            padding:8px;box-shadow:var(--shadow-sm)}*/
+.nav .cube{display:grid;gap:4px}
+
+/* ---------- right column ---------- */
+.rightcol{position:fixed;right:16px;top:74px;bottom:16px;width:286px;
+          display:flex;flex-direction:column;align-items:flex-end;gap:12px;z-index:25;
+          pointer-events:none}
+.rightcol > *{pointer-events:auto}
+.rightcol .panel{display:flex;flex-direction:column;min-height:0;min-width:0;width:286px}
+
+/* ---------- collapsible panels (Tools, Objects) ----------
+   Click the header to toggle open/closed. Width animates between the full
+   panel and a compact title pill; the body height animates via the grid-rows
+   0fr/1fr trick (works in every browser). */
+.panel.collapsible{overflow:hidden;transition:width .3s cubic-bezier(.4,0,.2,1)}
+.panel.collapsible > .panel-head{
+  display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;
+}
+.panel.collapsible > .panel-head .ph-title{flex:1}
+.panel.collapsible > .panel-head .sub{float:none}
+.collapse-ico{width:15px;height:15px;flex:none;color:var(--text-muted);
+              transform:rotate(180deg);transition:transform .3s cubic-bezier(.4,0,.2,1)}
+.panel.collapsible:hover > .panel-head .collapse-ico{color:var(--slate)}
+.panel-body{display:grid;grid-template-rows:1fr;
+            transition:grid-template-rows .3s cubic-bezier(.4,0,.2,1)}
+.pb-inner{min-height:0;overflow:hidden;transition:opacity .22s ease}
+/* objects body fills the panel so its list can scroll when parts overflow */
+.objects .panel-body{flex:1 1 auto;min-height:0}
+.objects .pb-inner{display:flex;flex-direction:column}
+
+/* collapsed: pill width, body closed, chevron points down */
+.panel.collapsed{width:150px}
+.panel.collapsed .panel-body{grid-template-rows:0fr}
+.panel.collapsed .pb-inner{opacity:0}
+.panel.collapsed > .panel-head{padding-bottom:12px}
+.panel.collapsed > .panel-head .sub{display:none}
+.panel.collapsed .collapse-ico{transform:rotate(0)}
+
+/* tools — keep natural height so a long parts list never squashes it */
+.tools{flex:0 0 auto}
+.tools .tool-group{padding:13px 14px}
+.tool-row{margin-top:6px;display:flex;gap:8px;flex-wrap:wrap}
+.tool-row .btn{font-size:12px;padding:7px 12px;flex:1 1 0;justify-content:center}
+.tool-row.chips{gap:7px;margin-top:10px}
+.tool-row.chips .chip{flex:0 0 auto}
+.field-label{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin:0 0 2px}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;cursor:pointer;
+            padding:8px 6px;margin:8px -6px 0;border-radius:9px}
+.toggle-row:hover{background:var(--tint-4)}
+.toggle-row .t-label{font-size:12.5px;font-weight:600;color:var(--text-soft)}
+.slider-row{display:flex;align-items:center;gap:10px;margin-top:10px}
+.slider-row input[type=range]{
+  flex:1;color-scheme:light;-webkit-appearance:none;appearance:none;
+  background:transparent;outline:none;
+}
+.slider-row input[type=range]::-webkit-slider-runnable-track{background:var(--g3);height:4px;border-radius:2px}
+.slider-row input[type=range]::-moz-range-track{background:var(--g3);height:4px;border-radius:2px}
+.slider-row input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:14px;height:14px;border-radius:50%;
+  background:var(--accent);border:none;margin-top:-5px;cursor:pointer;
+}
+.slider-row input[type=range]::-moz-range-thumb{
+  width:14px;height:14px;border-radius:50%;background:var(--accent);border:none;cursor:pointer;
+}
+.slider-row .val{font-size:11px;color:var(--text-muted);min-width:54px;text-align:right;font-variant-numeric:tabular-nums}
+
+/* objects — sized to its contents and parked at the bottom of the right column.
+   margin-top:auto pushes it down; flex:0 1 auto lets it shrink (and the list
+   scroll) when there are too many parts to fit the viewport. */
+.objects{flex:0 1 auto;margin-top:auto;min-height:0}
+.obj-list{overflow:auto;padding:6px 8px 10px;flex:1}
+.obj-row{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:10px;cursor:pointer}
+.obj-row:hover{background:var(--tint-4)}
+.obj-row.selected{background:var(--tint-3);box-shadow:inset 0 0 0 2px var(--tint-1)}
+.obj-row .swatch{width:18px;height:18px;border-radius:5px;border:2px solid #fff;box-shadow:0 0 0 1px var(--g3);flex:none;cursor:pointer;overflow:hidden;position:relative}
+.obj-row .swatch input{position:absolute;inset:-6px;opacity:0;cursor:pointer}
+.obj-row .oname{flex:1;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.obj-row .oname[contenteditable=true]{background:#fff;box-shadow:inset 0 0 0 1px var(--tint-1);border-radius:5px;padding:1px 4px}
+.obj-row .mini{width:26px;height:26px;border-radius:8px;border:none;background:transparent;cursor:pointer;color:var(--g1);
+               display:flex;align-items:center;justify-content:center;flex:none}
+.obj-row .mini:hover{background:#fff;color:var(--accent);box-shadow:var(--shadow-sm)}
+.obj-row .mini svg{width:15px;height:15px}
+.obj-row.hidden-part .oname{color:var(--g3);text-decoration:line-through}
+.obj-foot{display:flex;gap:6px;padding:8px 10px;border-top:1px solid var(--border)}
+.obj-foot .btn{font-size:11.5px;padding:6px 10px;flex:1;justify-content:center}
+.obj-empty{padding:18px 14px;font-size:12.5px;color:var(--text-muted);text-align:center;line-height:1.5}
+
+/* selected-object info strip */
+.objinfo{padding:8px 12px 10px;border-top:1px solid var(--border);font-size:11.5px;color:var(--text-soft);min-height:50px;}
+.objinfo b{color:var(--text)}
+.objinfo .dims{font-variant-numeric:tabular-nums}
+
+/* ---------- bottom-left info ---------- */
+.infocorner{position:fixed;left:16px;bottom:16px;z-index:25;display:flex;align-items:center;gap:10px}
+.confidential{
+  font-size:11.5px;font-weight:600;color:#b0413e;background:#fff;border:2px solid #f0d6d4;
+  padding:7px 12px;border-radius:999px;box-shadow:var(--shadow-sm);display:flex;align-items:center;gap:7px;
+}
+.confidential .dot{width:7px;height:7px;border-radius:50%;background:#cf5a55}
+.info-panel{
+  position:fixed;left:16px;bottom:64px;width:320px;display:none;z-index:26;
+}
+.info-panel.open{display:block}
+.info-body{padding:6px 14px 14px}
+.info-field{margin:10px 0}
+.info-field .k{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:3px}
+.info-field .v{font-size:13px;color:var(--text);line-height:1.45;word-break:break-word}
+.info-field input,.info-field textarea{
+  width:100%;font-family:inherit;font-size:13px;color:var(--text);
+  border:2px solid var(--border);border-radius:8px;padding:6px 8px;outline:none;resize:vertical;background:#fff;
+}
+.info-field input:focus,.info-field textarea:focus{border-color:var(--tint-1)}
+/* read-only (not editing) fields look like plain text */
+.info-field input:read-only,.info-field textarea:read-only{
+  border-color:transparent;background:transparent;padding-left:0;cursor:default;resize:none;
+}
+.info-edit-hint{font-size:11px;color:var(--text-muted);border-top:1px solid var(--border);padding-top:10px;margin-top:12px;line-height:1.4}
+body.editing .info-edit-hint{display:none}
+.info-edit-actions{display:none;gap:8px;margin-top:14px;border-top:1px solid var(--border);padding-top:14px}
+body.editing .info-edit-actions{display:flex}
+.info-edit-actions .btn{flex:1;justify-content:center}
+.menu-item.active-item{background:color-mix(in srgb, var(--accent-light) 14%, transparent);border-left-color:var(--accent-light)}
+
+/* ---------- overlays / messages ---------- */
+.overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:20;pointer-events:none}
+.overlay.show{display:flex}
+/*.overlay .card{
+  background:rgba(255,255,255,.92);border:2px solid var(--border);border-radius:18px;
+  padding:26px 34px;text-align:center;box-shadow:var(--shadow);pointer-events:auto;
+  backdrop-filter:blur(2px);max-width:80vw;
+}*/
+.overlay .card{text-align:center;pointer-events:auto;max-width:80vw;}
+.overlay .card .empty-mark{width:76px;height:76px;display:block;margin:0 auto 18px;
+        filter:drop-shadow(0 6px 18px rgba(13,13,15,.22))}
+.overlay .card .big{font-size:16px;font-weight:600;color:var(--slate);margin-bottom:6px;margin-top:3px}
+.overlay .card .small{font-size:13px;color:var(--text-muted)}
+.spinner{width:30px;height:30px;border-radius:50%;border:3px solid var(--g4);border-top-color:var(--accent);
+         margin:0 auto 14px;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.drop-hint{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;
+           background:rgba(57,94,157,.10);pointer-events:none}
+.drop-hint.show{display:flex}
+.drop-hint .ring{border:3px dashed var(--accent);border-radius:24px;padding:40px 60px;background:rgba(255,255,255,.85);
+                 font-size:18px;font-weight:600;color:var(--accent)}
+
+/* ---------- CSS2D labels (scoped to #css2d so the generic ".label" class does
+   not collide with menu-item / panel labels elsewhere) ---------- */
+#css2d .label{
+  pointer-events:auto;font-family:var(--font);font-size:12px;font-weight:600;
+  color:var(--text);background:rgba(255,255,255,.94);border:2px solid var(--border);
+  border-radius:9px;padding:4px 9px;box-shadow:var(--shadow-sm);white-space:nowrap;
+}
+#css2d .label.measure{color:var(--accent);border-color:var(--tint-1);transition:opacity .12s ease}
+/* component deltas (Δx·y·z) drop into their own box under the pill, only while hovering */
+#css2d .label.measure .comp{
+  display:none;position:absolute;top:calc(100% + 5px);left:50%;transform:translateX(-50%);
+  font-size:10px;font-weight:500;color:var(--text-muted);white-space:nowrap;
+  background:rgba(255,255,255,.96);border:1px solid var(--border);border-radius:7px;
+  padding:3px 8px;box-shadow:var(--shadow-sm);
+}
+#css2d .label.measure:hover .comp{display:block}
+/* anchor hidden behind the model: fade the label to match the x-rayed line */
+#css2d .label.measure.occluded{opacity:.4}
+#css2d .label.measure.occluded:hover{opacity:1}
+#css2d .label.annot{color:var(--slate);border-color:var(--g3);cursor:grab;transition:opacity .12s ease}
+#css2d .label.annot:hover{border-color:var(--g2)}
+#css2d .label.annot.dragging{cursor:grabbing;box-shadow:0 0 0 2px var(--tint-1), var(--shadow)}
+#css2d .label.annot .txt{display:inline-block;min-width:8px}
+/* anchor hidden behind the model: fade the floating label to match the x-rayed leader */
+#css2d .label.annot.occluded{opacity:.45}
+#css2d .label.annot.occluded:hover{opacity:1}
+/* inline editing: behave like a little text field */
+#css2d .label.annot.editing{cursor:text;border-color:var(--accent);box-shadow:0 0 0 2px var(--tint-2), var(--shadow-sm)}
+#css2d .label.annot.editing .txt{min-width:46px;outline:none;user-select:text;-webkit-user-select:text;cursor:text}
+/* remove-mode affordance (deletion only happens in Remove mode, no inline × button) */
+#css2d .label.removable{box-shadow:0 0 0 2px #e9a7a4, var(--shadow-sm);cursor:pointer}
+
+/* dimension hint while measuring */
+.hint{
+  position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:35;
+  background:var(--slate);color:#fff;font-size:12.5px;font-weight:500;
+  padding:8px 16px;border-radius:999px;box-shadow:var(--shadow);display:none;align-items:center;gap:8px;
+}
+.hint.show{display:flex}
+.hint kbd{background:rgba(255,255,255,.2);border-radius:5px;padding:1px 6px;font-family:inherit;font-size:11px}
+
+/* scrollbars */
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:var(--g3);border-radius:9px;border:2px solid #fff}
+::-webkit-scrollbar-thumb:hover{background:var(--g2)}
