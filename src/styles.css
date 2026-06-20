@@ -437,8 +437,16 @@ body.editing .info-edit-actions{display:flex}
 .part-coords .cc-row{display:flex;align-items:center;gap:6px}
 .part-coords .cc-lbl{width:34px;flex:none;font-size:10.5px;font-weight:700;color:var(--text-soft);text-transform:uppercase;letter-spacing:.3px}
 .part-coords .cc{display:flex;align-items:center;gap:4px;flex:1;min-width:0}
-.part-coords .cc label{font-size:11px;font-weight:700;color:var(--text-soft)}
+.part-coords .cc label{font-size:11px;font-weight:500;color:var(--accent)}
 .part-coords .cc .val-in{width:100%;text-align:left;min-width:0}
+.part-coords .cc .val-in{
+  font:inherit;font-size:14px;color:var(--text-soft);
+  background:transparent;border:none;border:2px solid var(--g4);border-radius: 6px;
+  padding:1px 2px;outline:none;font-variant-numeric:tabular-nums;
+}
+.part-coords .cc .val-in:hover{border-color:var(--g2)}
+.part-coords .cc .val-in:focus{border-color:var(--accent)}
+
 .part-coords .cc.cc-wide{flex:1}
 
 /* scrollbars */
