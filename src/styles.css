@@ -274,7 +274,16 @@ body{
 .slider-row input[type=range]::-moz-range-thumb{
   width:14px;height:14px;border-radius:50%;background:var(--accent);border:none;cursor:pointer;
 }
-.slider-row .val{font-size:11px;color:var(--text-muted);min-width:54px;text-align:right;font-variant-numeric:tabular-nums}
+.slider-row .val{font-size:11px;color:var(--text-muted);min-width:54px;text-align:right;font-variant-numeric:tabular-nums;display:flex;align-items:center;justify-content:flex-end;gap:3px}
+.slider-row .val-in{
+  width:38px;font:inherit;color:var(--text-soft);text-align:right;
+  background:transparent;border:none;border:2px solid var(--g4);border-radius: 6px;
+  padding:1px 2px;outline:none;font-variant-numeric:tabular-nums;
+}
+.slider-row .val-in:hover{border-color:var(--g2)}
+.slider-row .val-in:focus{border-color:var(--accent)}
+.slider-row .val-in::-webkit-outer-spin-button,
+.slider-row .val-in::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 
 /* objects — sized to its contents and parked at the bottom of the right column.
    margin-top:auto pushes it down; flex:0 1 auto lets it shrink (and the list

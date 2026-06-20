@@ -49,7 +49,7 @@ const state = {
   parts: [],         // runtime: {id, fileId, index, name, color, mesh, visible}
   measurements: [],  // runtime: {id, a:Vec3(local), b:Vec3(local), group, label}
   annotations: [],   // runtime: {id, p:Vec3(local), text, obj(CSS2DObject), marker}
-  section: { on: false, axis: "x", t: 0.5, flip: false },
+  section: { on: false, axis: "x", flip: false, offsets: { x: 0.5, y: 0.5, z: 0.5 } },
 };
 
 let fileSeq = 0, partSeq = 0, markSeq = 0;
@@ -861,6 +861,15 @@ const sectionPlane = new THREE.Plane(new THREE.Vector3(1, 0, 0), 0);
 let stencilGroup = null;
 let capMesh = null;
 
+const clamp01 = (v) => Math.min(1, Math.max(0, v));
+// offset (0..1) along the cut normal, remembered per file axis
+function secT() { return state.section.offsets[state.section.axis]; }
+function setSecT(v) { state.section.offsets[state.section.axis] = clamp01(v); }
+// world-space cut normal for the active axis, ignoring flip (the offset axis)
+function sectionBaseNormal() {
+  return AXES[state.section.axis].clone().applyQuaternion(modelRoot.quaternion).normalize();
+}
+
 function projectRange(box, normal) {
   const corners = [
     new THREE.Vector3(box.min.x, box.min.y, box.min.z),
@@ -914,10 +923,8 @@ function buildSection() {
   teardownSection();
   if (!state.section.on || state.parts.length === 0) return;
 
-  // world-space plane normal from selected file axis
-  const wn = AXES[state.section.axis].clone().applyQuaternion(modelRoot.quaternion).normalize();
-  if (state.section.flip) wn.negate();
-  sectionPlane.normal.copy(wn);
+  // normal/constant are set by updateSectionGeometry below (it owns the flip);
+  // everything here references the shared sectionPlane object, so it follows.
 
   // assign clipping to all part materials (and their edge lines)
   state.parts.forEach((p) => {
@@ -951,23 +958,49 @@ function buildSection() {
 
 function updateSectionGeometry() {
   if (!state.section.on || !capMesh) return;
-  const wn = sectionPlane.normal;
   const box = getWorldBox();
   if (!box) return;
+  const bn = sectionBaseNormal();                          // un-flipped offset axis
   const center = box.getCenter(new THREE.Vector3());
-  const { min, max } = projectRange(box, wn);
+  const { min, max } = projectRange(box, bn);
   const eps = (max - min) * 0.001 + 1e-4;
-  const d = (min + eps) + (max - min - 2 * eps) * state.section.t;  // distance along normal
-  sectionPlane.constant = -d;
+  const d = (min + eps) + (max - min - 2 * eps) * secT();  // distance along bn — fixed by offset
 
-  // place cap on the plane near model centre
-  const onPlane = center.clone().add(wn.clone().multiplyScalar(d - wn.dot(center)));
+  // Flip only swaps which side is removed; the cut stays put. A plane (n, c) and
+  // (-n, -c) are the same plane geometrically but clip opposite half-spaces.
+  if (state.section.flip) { sectionPlane.normal.copy(bn).negate(); sectionPlane.constant = d; }
+  else                    { sectionPlane.normal.copy(bn);          sectionPlane.constant = -d; }
+
+  // place cap on the plane near model centre (position is flip-independent)
+  const onPlane = center.clone().add(bn.clone().multiplyScalar(d - bn.dot(center)));
   capMesh.position.copy(onPlane);
-  capMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), wn);
+  capMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), sectionPlane.normal);
 
-  // slider read-out: distance from model centre along axis, in mm
-  const rel = d - wn.dot(center);
-  $("secVal").textContent = fmt(rel) + " mm";
+  // read-out: distance from model centre along the axis, in mm — sign is flip-
+  // independent. Leave the field alone while the user is typing into it.
+  const rel = d - bn.dot(center);
+  const inp = $("secVal");
+  if (document.activeElement !== inp) inp.value = fmt(rel);
+}
+
+// convert a typed mm offset (from model centre) into a slider position (0..1)
+function offsetToT(rel) {
+  const box = getWorldBox();
+  if (!box) return secT();
+  const bn = sectionBaseNormal();
+  const center = box.getCenter(new THREE.Vector3());
+  const { min, max } = projectRange(box, bn);
+  const eps = (max - min) * 0.001 + 1e-4;
+  const span = (max - min) - 2 * eps;
+  if (span <= 0) return 0.5;
+  const d = rel + bn.dot(center);
+  return clamp01((d - (min + eps)) / span);
+}
+
+// mirror the active-axis offset onto the slider + input
+function syncSecUI() {
+  $("secSlider").value = Math.round(secT() * 1000);
+  if (state.section.on) updateSectionGeometry();
 }
 
 /* ----------------------------------------------------------------------------
@@ -1137,7 +1170,7 @@ function serializeState() {
     parts: state.parts.map((p) => ({ fileId: p.fileId, index: p.index, name: p.name, color: p.color, visible: p.visible })),
     measurements: state.measurements.map((m) => ({ a: m.a.toArray(), b: m.b.toArray() })),
     annotations: state.annotations.map((a) => ({ p: a.p.toArray(), o: a.lp.clone().sub(a.p).toArray(), text: a.text })),
-    section: Object.assign({}, state.section),
+    section: { on: state.section.on, axis: state.section.axis, flip: state.section.flip, offsets: Object.assign({}, state.section.offsets) },
   };
 }
 
@@ -1173,7 +1206,18 @@ function downloadText(filename, text) {
 function loadFromState(data) {
   showOverlay("loading");
   Object.assign(state.meta, data.meta || {});
-  state.section = Object.assign({ on: false, axis: "x", t: 0.5, flip: false }, data.section || {});
+  const sec = data.section || {};
+  // migrate older files that stored a single `t` instead of per-axis offsets
+  const def = (typeof sec.t === "number") ? sec.t : 0.5;
+  const off = sec.offsets || {};
+  state.section = {
+    on: !!sec.on, axis: sec.axis || "x", flip: !!sec.flip,
+    offsets: {
+      x: (typeof off.x === "number") ? off.x : def,
+      y: (typeof off.y === "number") ? off.y : def,
+      z: (typeof off.z === "number") ? off.z : def,
+    },
+  };
 
   applyUpAxis(state.meta.upAxis || "z+");
 
@@ -1196,8 +1240,9 @@ function loadFromState(data) {
       addAnnotation(p, a.text || "", lp ? { lp } : {});
     });
     finishLoad();
+    $("secFlip").classList.toggle("active", state.section.flip);
     if (state.section.on) { $("swSection").classList.add("on"); syncChips(".secAxis", "axis", state.section.axis); buildSection(); }
-    $("secSlider").value = Math.round(state.section.t * 1000);
+    $("secSlider").value = Math.round(secT() * 1000);
   });
 }
 
@@ -1328,10 +1373,19 @@ function wireUI() {
   });
   document.querySelectorAll(".secAxis").forEach((c) => c.addEventListener("click", () => {
     state.section.axis = c.dataset.axis; syncChips(".secAxis", "axis", state.section.axis);
+    $("secSlider").value = Math.round(secT() * 1000);   // restore this axis' offset
     if (state.section.on) buildSection();
   }));
-  $("secFlip").addEventListener("click", () => { state.section.flip = !state.section.flip; $("secFlip").classList.toggle("active", state.section.flip); if (state.section.on) buildSection(); });
-  $("secSlider").addEventListener("input", (e) => { state.section.t = e.target.value / 1000; updateSectionGeometry(); });
+  $("secFlip").addEventListener("click", () => { state.section.flip = !state.section.flip; $("secFlip").classList.toggle("active", state.section.flip); if (state.section.on) updateSectionGeometry(); });
+  $("secSlider").addEventListener("input", (e) => { setSecT(e.target.value / 1000); updateSectionGeometry(); });
+  // typed offset: parse the mm value, map back to a slider position, clamp to bounds
+  const commitSecVal = () => {
+    const rel = parseFloat($("secVal").value);
+    if (isFinite(rel)) setSecT(offsetToT(rel));
+    syncSecUI();
+  };
+  $("secVal").addEventListener("change", commitSecVal);
+  $("secVal").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("secVal").blur(); } });
 
   // tools — annotation
   $("btnAnnot").addEventListener("click", () => setMode(mode === "annotate" ? "orbit" : "annotate"));
@@ -1447,6 +1501,9 @@ function removeAllParts() {
   clearMeasurements();
   state.annotations.slice().forEach((a) => removeAnnotation(a.id));
   teardownSection(); state.section.on = false; $("swSection").classList.remove("on");
+  // fresh model starts centred on every plane
+  state.section.offsets = { x: 0.5, y: 0.5, z: 0.5 };
+  $("secSlider").value = 500; $("secVal").value = "";
   rebuildObjectsPanel(); refreshInfoPanel(); showOverlay("empty");
 }
 
