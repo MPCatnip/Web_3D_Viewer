@@ -108,6 +108,14 @@
         <span class="label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>Edit</span>
         <span class="desc">Rename the model, description and part names.</span>
       </div>
+      <div id="miSaveXform" class="menu-item">
+        <span class="label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>Set transforms as default</span>
+        <span class="desc">Make the current part positions, rotations and scales the baseline that Reset returns to. (Save file to embed)</span>
+      </div>
+      <div id="miRemoveXform" class="menu-item">
+        <span class="label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><polyline points="3 3 3 8 8 8"/></svg>Remove all transforms</span>
+        <span class="desc">Reset every part back to its default transform.</span>
+      </div>
       <div id="miRemovePart" class="menu-item danger">
         <span class="label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Remove part</span>
         <span class="desc">Remove the currently selected part.</span>
@@ -178,7 +186,7 @@
 <div class="rightcol">
   <!-- tools -->
   <div class="panel tools collapsible collapsed">
-    <div class="panel-head"><span class="ph-title">Tools</span><svg class="collapse-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></div>
+    <div class="panel-head"><span class="ph-title">Inspection</span><svg class="collapse-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></div>
     <div class="panel-body"><div class="pb-inner">
     <div class="divider"></div>
 
@@ -215,7 +223,7 @@
       </div>
       <div class="slider-row">
         <input type="range" id="secSlider" min="0" max="1000" value="500">
-        <span class="val"><input type="text" id="secVal" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Type a section offset (mm from centre)">mm</span>
+        <span class="val"><input type="text" id="secVal" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Type a section offset (mm from origin)">mm</span>
       </div>
     </div>
     </div></div>
@@ -228,10 +236,32 @@
     <div class="divider"></div>
     <div class="obj-list" id="objList"></div>
     <div class="objinfo" id="objInfo">No part selected.</div>
+    <div class="part-coords" id="partCoords" style="display:none">
+      <div class="cc-row">
+        <span class="cc-lbl">Pos</span>
+        <span class="cc"><label for="posX">X</label><input type="text" id="posX" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Position X (mm)"></span>
+        <span class="cc"><label for="posY">Y</label><input type="text" id="posY" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Position Y (mm)"></span>
+        <span class="cc"><label for="posZ">Z</label><input type="text" id="posZ" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Position Z (mm)"></span>
+      </div>
+      <div class="cc-row">
+        <span class="cc-lbl">Rot°</span>
+        <span class="cc"><label for="rotX">X</label><input type="text" id="rotX" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Rotation X (degrees)"></span>
+        <span class="cc"><label for="rotY">Y</label><input type="text" id="rotY" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Rotation Y (degrees)"></span>
+        <span class="cc"><label for="rotZ">Z</label><input type="text" id="rotZ" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Rotation Z (degrees)"></span>
+      </div>
+      <div class="cc-row">
+        <span class="cc-lbl">Scale</span>
+        <span class="cc cc-wide"><input type="text" id="scaleU" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Overall scale (uniform)"></span>
+      </div>
+    </div>
     <div class="obj-foot">
       <button id="btnIsolate" class="btn">Isolate</button>
       <button id="btnHideSel" class="btn">Hide</button>
       <button id="btnShowAll" class="btn">Show all</button>
+    </div>
+    <div class="obj-foot">
+      <button id="btnXform" class="btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg>Transform</button>
+      <button id="btnResetXform" class="btn" style="display:none">Reset all</button>
     </div>
     </div></div>
   </div>
@@ -275,9 +305,23 @@
 <div id="dropHint" class="drop-hint"><div class="ring">Drop to add to the view</div></div>
 <div id="hint" class="hint"></div>
 
+<!-- live distance / rotation read-out while dragging a gizmo handle -->
+<div id="xformReadout" class="xform-readout"></div>
+
+<!-- floating transform mode bar (shown only while "Transform parts" is on) -->
+<div id="xformBar" class="xform-bar">
+  <button id="xfMove" class="xf-btn active" title="Move (translate)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg>Move
+  </button>
+  <button id="xfRotate" class="xf-btn" title="Rotate">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>Rotate
+  </button>
+</div>
+
 <!--[[SCRIPTS]]-->
 <script src="vendor/three.min.js"></script>
 <script src="vendor/OrbitControls.js"></script>
+<script src="vendor/TransformControls.js"></script>
 <script src="vendor/OBJLoader.js"></script>
 <script src="vendor/STLLoader.js"></script>
 <script src="vendor/GLTFLoader.js"></script>

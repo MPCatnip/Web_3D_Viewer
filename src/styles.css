@@ -405,6 +405,42 @@ body.editing .info-edit-actions{display:flex}
 .hint.show{display:flex}
 .hint kbd{background:rgba(255,255,255,.2);border-radius:5px;padding:1px 6px;font-family:inherit;font-size:11px}
 
+/* floating transform mode bar (Move / Rotate) — only while "Transform parts" is on */
+.xform-bar{
+  position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:35;
+  display:none;align-items:center;gap:4px;
+  background:var(--slate);border:1px solid var(--border);border-radius:999px;
+  padding:4px;box-shadow:var(--shadow-sm);
+}
+.xform-bar.show{display:flex}
+.xf-btn{
+  font-family:inherit;font-size:12px;font-weight:600;color:#fff;
+  background:transparent;border:none;border-radius:999px;cursor:pointer;
+  display:flex;align-items:center;gap:6px;padding:7px 14px;transition:.12s;
+}
+.xf-btn:hover{background:rgba(255,255,255,.2)}
+.xf-btn.active{background:var(--accent);color:#fff}
+.xf-btn svg{width:16px;height:16px;flex:none}
+/* per-row reset (transform) button reuses .mini; tinted so it reads as an action */
+.obj-row .mini.reset{color:var(--accent)}
+
+/* live distance / rotation read-out while dragging a gizmo handle (sits above the bar) */
+.xform-readout{
+  position:fixed;left:50%;bottom:70px;transform:translateX(-50%);z-index:36;
+  background:var(--slate);color:#fff;font-size:12.5px;font-weight:500;
+  padding:7px 14px;border-radius:999px;box-shadow:var(--shadow);display:none;white-space:nowrap;
+}
+.xform-readout.show{display:block}
+
+/* per-part position / rotation / scale inputs (shown while transforming a selected part) */
+.part-coords{display:flex;flex-direction:column;gap:5px;padding:6px 12px 10px}
+.part-coords .cc-row{display:flex;align-items:center;gap:6px}
+.part-coords .cc-lbl{width:34px;flex:none;font-size:10.5px;font-weight:700;color:var(--text-soft);text-transform:uppercase;letter-spacing:.3px}
+.part-coords .cc{display:flex;align-items:center;gap:4px;flex:1;min-width:0}
+.part-coords .cc label{font-size:11px;font-weight:700;color:var(--text-soft)}
+.part-coords .cc .val-in{width:100%;text-align:left;min-width:0}
+.part-coords .cc.cc-wide{flex:1}
+
 /* scrollbars */
 ::-webkit-scrollbar{width:9px;height:9px}
 ::-webkit-scrollbar-thumb{background:var(--g3);border-radius:9px;border:2px solid #fff}

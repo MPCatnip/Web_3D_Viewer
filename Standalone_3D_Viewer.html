@@ -284,12 +284,12 @@ body{
 }
 .slider-row .val{font-size:11px;color:var(--text-muted);min-width:54px;text-align:right;font-variant-numeric:tabular-nums;display:flex;align-items:center;justify-content:flex-end;gap:3px}
 .slider-row .val-in{
-  width:38px;font:inherit;color:var(--text);text-align:right;
-  background:transparent;border:none;border-bottom:1px solid var(--g3);
+  width:38px;font:inherit;color:var(--text-soft);text-align:right;
+  background:transparent;border:none;border:2px solid var(--g4);border-radius: 6px;
   padding:1px 2px;outline:none;font-variant-numeric:tabular-nums;
 }
-.slider-row .val-in:hover{border-bottom-color:var(--text-muted)}
-.slider-row .val-in:focus{border-bottom-color:var(--accent)}
+.slider-row .val-in:hover{border-color:var(--g2)}
+.slider-row .val-in:focus{border-color:var(--accent)}
 .slider-row .val-in::-webkit-outer-spin-button,
 .slider-row .val-in::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 
@@ -413,6 +413,42 @@ body.editing .info-edit-actions{display:flex}
 .hint.show{display:flex}
 .hint kbd{background:rgba(255,255,255,.2);border-radius:5px;padding:1px 6px;font-family:inherit;font-size:11px}
 
+/* floating transform mode bar (Move / Rotate) — only while "Transform parts" is on */
+.xform-bar{
+  position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:35;
+  display:none;align-items:center;gap:4px;
+  background:#fff;border:1px solid var(--border);border-radius:999px;
+  padding:4px;box-shadow:var(--shadow-sm);
+}
+.xform-bar.show{display:flex}
+.xf-btn{
+  font-family:inherit;font-size:12px;font-weight:600;color:var(--text-soft);
+  background:transparent;border:none;border-radius:999px;cursor:pointer;
+  display:flex;align-items:center;gap:6px;padding:7px 14px;transition:.12s;
+}
+.xf-btn:hover{background:var(--tint-4);color:var(--slate)}
+.xf-btn.active{background:var(--tint-3);color:var(--accent)}
+.xf-btn svg{width:16px;height:16px;flex:none}
+/* per-row reset (transform) button reuses .mini; tinted so it reads as an action */
+.obj-row .mini.reset{color:var(--accent)}
+
+/* live distance / rotation read-out while dragging a gizmo handle (sits above the bar) */
+.xform-readout{
+  position:fixed;left:50%;bottom:70px;transform:translateX(-50%);z-index:36;
+  background:var(--slate);color:#fff;font-size:12.5px;font-weight:500;
+  padding:7px 14px;border-radius:999px;box-shadow:var(--shadow);display:none;white-space:nowrap;
+}
+.xform-readout.show{display:block}
+
+/* per-part position / rotation / scale inputs (shown while transforming a selected part) */
+.part-coords{display:flex;flex-direction:column;gap:5px;padding:6px 12px 10px}
+.part-coords .cc-row{display:flex;align-items:center;gap:6px}
+.part-coords .cc-lbl{width:34px;flex:none;font-size:10.5px;font-weight:700;color:var(--text-soft);text-transform:uppercase;letter-spacing:.3px}
+.part-coords .cc{display:flex;align-items:center;gap:4px;flex:1;min-width:0}
+.part-coords .cc label{font-size:11px;font-weight:700;color:var(--text-soft)}
+.part-coords .cc .val-in{width:100%;text-align:left;min-width:0}
+.part-coords .cc.cc-wide{flex:1}
+
 /* scrollbars */
 ::-webkit-scrollbar{width:9px;height:9px}
 ::-webkit-scrollbar-thumb{background:var(--g3);border-radius:9px;border:2px solid #fff}
@@ -521,6 +557,14 @@ body.editing .info-edit-actions{display:flex}
         <span class="label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>Edit</span>
         <span class="desc">Rename the model, description and part names.</span>
       </div>
+      <div id="miSaveXform" class="menu-item">
+        <span class="label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>Save transforms as default</span>
+        <span class="desc">Make the current part positions, rotations and scales the baseline that Reset returns to.</span>
+      </div>
+      <div id="miRemoveXform" class="menu-item">
+        <span class="label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><polyline points="3 3 3 8 8 8"/></svg>Remove all transforms</span>
+        <span class="desc">Reset every part back to its default transform.</span>
+      </div>
       <div id="miRemovePart" class="menu-item danger">
         <span class="label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Remove part</span>
         <span class="desc">Remove the currently selected part.</span>
@@ -628,7 +672,7 @@ body.editing .info-edit-actions{display:flex}
       </div>
       <div class="slider-row">
         <input type="range" id="secSlider" min="0" max="1000" value="500">
-        <span class="val"><input type="text" id="secVal" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Type a section offset (mm from centre)">mm</span>
+        <span class="val"><input type="text" id="secVal" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Type a section offset (mm from origin)">mm</span>
       </div>
     </div>
     </div></div>
@@ -641,10 +685,32 @@ body.editing .info-edit-actions{display:flex}
     <div class="divider"></div>
     <div class="obj-list" id="objList"></div>
     <div class="objinfo" id="objInfo">No part selected.</div>
+    <div class="part-coords" id="partCoords" style="display:none">
+      <div class="cc-row">
+        <span class="cc-lbl">Pos</span>
+        <span class="cc"><label for="posX">X</label><input type="text" id="posX" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Position X (mm)"></span>
+        <span class="cc"><label for="posY">Y</label><input type="text" id="posY" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Position Y (mm)"></span>
+        <span class="cc"><label for="posZ">Z</label><input type="text" id="posZ" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Position Z (mm)"></span>
+      </div>
+      <div class="cc-row">
+        <span class="cc-lbl">Rot°</span>
+        <span class="cc"><label for="rotX">X</label><input type="text" id="rotX" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Rotation X (degrees)"></span>
+        <span class="cc"><label for="rotY">Y</label><input type="text" id="rotY" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Rotation Y (degrees)"></span>
+        <span class="cc"><label for="rotZ">Z</label><input type="text" id="rotZ" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Rotation Z (degrees)"></span>
+      </div>
+      <div class="cc-row">
+        <span class="cc-lbl">Scale</span>
+        <span class="cc cc-wide"><input type="text" id="scaleU" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Overall scale (uniform)"></span>
+      </div>
+    </div>
     <div class="obj-foot">
       <button id="btnIsolate" class="btn">Isolate</button>
       <button id="btnHideSel" class="btn">Hide</button>
       <button id="btnShowAll" class="btn">Show all</button>
+    </div>
+    <div class="obj-foot">
+      <button id="btnXform" class="btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg>Transform</button>
+      <button id="btnResetXform" class="btn" style="display:none">Reset all</button>
     </div>
     </div></div>
   </div>
@@ -687,6 +753,19 @@ body.editing .info-edit-actions{display:flex}
   <div class="big">No model loaded</div><div class="small">Click <b>Open</b> or drag a <b>.obj</b> / <b>.stl</b> / <b>.glb</b> file into the window</div></div></div>
 <div id="dropHint" class="drop-hint"><div class="ring">Drop to add to the view</div></div>
 <div id="hint" class="hint"></div>
+
+<!-- live distance / rotation read-out while dragging a gizmo handle -->
+<div id="xformReadout" class="xform-readout"></div>
+
+<!-- floating transform mode bar (shown only while "Transform parts" is on) -->
+<div id="xformBar" class="xform-bar">
+  <button id="xfMove" class="xf-btn active" title="Move (translate)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg>Move
+  </button>
+  <button id="xfRotate" class="xf-btn" title="Rotate">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>Rotate
+  </button>
+</div>
 
 <!--[[SCRIPTS]]-->
 <script>
@@ -1783,6 +1862,1392 @@ body.editing .info-edit-actions{display:flex}
 
 	THREE.MapControls = MapControls;
 	THREE.OrbitControls = OrbitControls;
+
+} )();
+
+</script>
+<script>
+( function () {
+
+	const _raycaster = new THREE.Raycaster();
+
+	const _tempVector = new THREE.Vector3();
+
+	const _tempVector2 = new THREE.Vector3();
+
+	const _tempQuaternion = new THREE.Quaternion();
+
+	const _unit = {
+		X: new THREE.Vector3( 1, 0, 0 ),
+		Y: new THREE.Vector3( 0, 1, 0 ),
+		Z: new THREE.Vector3( 0, 0, 1 )
+	};
+	const _changeEvent = {
+		type: 'change'
+	};
+	const _mouseDownEvent = {
+		type: 'mouseDown'
+	};
+	const _mouseUpEvent = {
+		type: 'mouseUp',
+		mode: null
+	};
+	const _objectChangeEvent = {
+		type: 'objectChange'
+	};
+
+	class TransformControls extends THREE.Object3D {
+
+		constructor( camera, domElement ) {
+
+			super();
+
+			if ( domElement === undefined ) {
+
+				console.warn( 'THREE.TransformControls: The second parameter "domElement" is now mandatory.' );
+				domElement = document;
+
+			}
+
+			this.visible = false;
+			this.domElement = domElement;
+			this.domElement.style.touchAction = 'none'; // disable touch scroll
+
+			const _gizmo = new TransformControlsGizmo();
+
+			this._gizmo = _gizmo;
+			this.add( _gizmo );
+
+			const _plane = new TransformControlsPlane();
+
+			this._plane = _plane;
+			this.add( _plane );
+			const scope = this; // Defined getter, setter and store for a property
+
+			function defineProperty( propName, defaultValue ) {
+
+				let propValue = defaultValue;
+				Object.defineProperty( scope, propName, {
+					get: function () {
+
+						return propValue !== undefined ? propValue : defaultValue;
+
+					},
+					set: function ( value ) {
+
+						if ( propValue !== value ) {
+
+							propValue = value;
+							_plane[ propName ] = value;
+							_gizmo[ propName ] = value;
+							scope.dispatchEvent( {
+								type: propName + '-changed',
+								value: value
+							} );
+							scope.dispatchEvent( _changeEvent );
+
+						}
+
+					}
+				} );
+				scope[ propName ] = defaultValue;
+				_plane[ propName ] = defaultValue;
+				_gizmo[ propName ] = defaultValue;
+
+			} // Define properties with getters/setter
+			// Setting the defined property will automatically trigger change event
+			// Defined properties are passed down to gizmo and plane
+
+
+			defineProperty( 'camera', camera );
+			defineProperty( 'object', undefined );
+			defineProperty( 'enabled', true );
+			defineProperty( 'axis', null );
+			defineProperty( 'mode', 'translate' );
+			defineProperty( 'translationSnap', null );
+			defineProperty( 'rotationSnap', null );
+			defineProperty( 'scaleSnap', null );
+			defineProperty( 'space', 'world' );
+			defineProperty( 'size', 1 );
+			defineProperty( 'dragging', false );
+			defineProperty( 'showX', true );
+			defineProperty( 'showY', true );
+			defineProperty( 'showZ', true ); // Reusable utility variables
+
+			const worldPosition = new THREE.Vector3();
+			const worldPositionStart = new THREE.Vector3();
+			const worldQuaternion = new THREE.Quaternion();
+			const worldQuaternionStart = new THREE.Quaternion();
+			const cameraPosition = new THREE.Vector3();
+			const cameraQuaternion = new THREE.Quaternion();
+			const pointStart = new THREE.Vector3();
+			const pointEnd = new THREE.Vector3();
+			const rotationAxis = new THREE.Vector3();
+			const rotationAngle = 0;
+			const eye = new THREE.Vector3(); // TODO: remove properties unused in plane and gizmo
+
+			defineProperty( 'worldPosition', worldPosition );
+			defineProperty( 'worldPositionStart', worldPositionStart );
+			defineProperty( 'worldQuaternion', worldQuaternion );
+			defineProperty( 'worldQuaternionStart', worldQuaternionStart );
+			defineProperty( 'cameraPosition', cameraPosition );
+			defineProperty( 'cameraQuaternion', cameraQuaternion );
+			defineProperty( 'pointStart', pointStart );
+			defineProperty( 'pointEnd', pointEnd );
+			defineProperty( 'rotationAxis', rotationAxis );
+			defineProperty( 'rotationAngle', rotationAngle );
+			defineProperty( 'eye', eye );
+			this._offset = new THREE.Vector3();
+			this._startNorm = new THREE.Vector3();
+			this._endNorm = new THREE.Vector3();
+			this._cameraScale = new THREE.Vector3();
+			this._parentPosition = new THREE.Vector3();
+			this._parentQuaternion = new THREE.Quaternion();
+			this._parentQuaternionInv = new THREE.Quaternion();
+			this._parentScale = new THREE.Vector3();
+			this._worldScaleStart = new THREE.Vector3();
+			this._worldQuaternionInv = new THREE.Quaternion();
+			this._worldScale = new THREE.Vector3();
+			this._positionStart = new THREE.Vector3();
+			this._quaternionStart = new THREE.Quaternion();
+			this._scaleStart = new THREE.Vector3();
+			this._getPointer = getPointer.bind( this );
+			this._onPointerDown = onPointerDown.bind( this );
+			this._onPointerHover = onPointerHover.bind( this );
+			this._onPointerMove = onPointerMove.bind( this );
+			this._onPointerUp = onPointerUp.bind( this );
+			this.domElement.addEventListener( 'pointerdown', this._onPointerDown );
+			this.domElement.addEventListener( 'pointermove', this._onPointerHover );
+			this.domElement.addEventListener( 'pointerup', this._onPointerUp );
+
+		} // updateMatrixWorld  updates key transformation variables
+
+
+		updateMatrixWorld() {
+
+			if ( this.object !== undefined ) {
+
+				this.object.updateMatrixWorld();
+
+				if ( this.object.parent === null ) {
+
+					console.error( 'TransformControls: The attached 3D object must be a part of the scene graph.' );
+
+				} else {
+
+					this.object.parent.matrixWorld.decompose( this._parentPosition, this._parentQuaternion, this._parentScale );
+
+				}
+
+				this.object.matrixWorld.decompose( this.worldPosition, this.worldQuaternion, this._worldScale );
+
+				this._parentQuaternionInv.copy( this._parentQuaternion ).invert();
+
+				this._worldQuaternionInv.copy( this.worldQuaternion ).invert();
+
+			}
+
+			this.camera.updateMatrixWorld();
+			this.camera.matrixWorld.decompose( this.cameraPosition, this.cameraQuaternion, this._cameraScale );
+			this.eye.copy( this.cameraPosition ).sub( this.worldPosition ).normalize();
+			super.updateMatrixWorld( this );
+
+		}
+
+		pointerHover( pointer ) {
+
+			if ( this.object === undefined || this.dragging === true ) return;
+
+			_raycaster.setFromCamera( pointer, this.camera );
+
+			const intersect = intersectObjectWithRay( this._gizmo.picker[ this.mode ], _raycaster );
+
+			if ( intersect ) {
+
+				this.axis = intersect.object.name;
+
+			} else {
+
+				this.axis = null;
+
+			}
+
+		}
+
+		pointerDown( pointer ) {
+
+			if ( this.object === undefined || this.dragging === true || pointer.button !== 0 ) return;
+
+			if ( this.axis !== null ) {
+
+				_raycaster.setFromCamera( pointer, this.camera );
+
+				const planeIntersect = intersectObjectWithRay( this._plane, _raycaster, true );
+
+				if ( planeIntersect ) {
+
+					this.object.updateMatrixWorld();
+					this.object.parent.updateMatrixWorld();
+
+					this._positionStart.copy( this.object.position );
+
+					this._quaternionStart.copy( this.object.quaternion );
+
+					this._scaleStart.copy( this.object.scale );
+
+					this.object.matrixWorld.decompose( this.worldPositionStart, this.worldQuaternionStart, this._worldScaleStart );
+					this.pointStart.copy( planeIntersect.point ).sub( this.worldPositionStart );
+
+				}
+
+				this.dragging = true;
+				_mouseDownEvent.mode = this.mode;
+				this.dispatchEvent( _mouseDownEvent );
+
+			}
+
+		}
+
+		pointerMove( pointer ) {
+
+			const axis = this.axis;
+			const mode = this.mode;
+			const object = this.object;
+			let space = this.space;
+
+			if ( mode === 'scale' ) {
+
+				space = 'local';
+
+			} else if ( axis === 'E' || axis === 'XYZE' || axis === 'XYZ' ) {
+
+				space = 'world';
+
+			}
+
+			if ( object === undefined || axis === null || this.dragging === false || pointer.button !== - 1 ) return;
+
+			_raycaster.setFromCamera( pointer, this.camera );
+
+			const planeIntersect = intersectObjectWithRay( this._plane, _raycaster, true );
+			if ( ! planeIntersect ) return;
+			this.pointEnd.copy( planeIntersect.point ).sub( this.worldPositionStart );
+
+			if ( mode === 'translate' ) {
+
+				// Apply translate
+				this._offset.copy( this.pointEnd ).sub( this.pointStart );
+
+				if ( space === 'local' && axis !== 'XYZ' ) {
+
+					this._offset.applyQuaternion( this._worldQuaternionInv );
+
+				}
+
+				if ( axis.indexOf( 'X' ) === - 1 ) this._offset.x = 0;
+				if ( axis.indexOf( 'Y' ) === - 1 ) this._offset.y = 0;
+				if ( axis.indexOf( 'Z' ) === - 1 ) this._offset.z = 0;
+
+				if ( space === 'local' && axis !== 'XYZ' ) {
+
+					this._offset.applyQuaternion( this._quaternionStart ).divide( this._parentScale );
+
+				} else {
+
+					this._offset.applyQuaternion( this._parentQuaternionInv ).divide( this._parentScale );
+
+				}
+
+				object.position.copy( this._offset ).add( this._positionStart ); // Apply translation snap
+
+				if ( this.translationSnap ) {
+
+					if ( space === 'local' ) {
+
+						object.position.applyQuaternion( _tempQuaternion.copy( this._quaternionStart ).invert() );
+
+						if ( axis.search( 'X' ) !== - 1 ) {
+
+							object.position.x = Math.round( object.position.x / this.translationSnap ) * this.translationSnap;
+
+						}
+
+						if ( axis.search( 'Y' ) !== - 1 ) {
+
+							object.position.y = Math.round( object.position.y / this.translationSnap ) * this.translationSnap;
+
+						}
+
+						if ( axis.search( 'Z' ) !== - 1 ) {
+
+							object.position.z = Math.round( object.position.z / this.translationSnap ) * this.translationSnap;
+
+						}
+
+						object.position.applyQuaternion( this._quaternionStart );
+
+					}
+
+					if ( space === 'world' ) {
+
+						if ( object.parent ) {
+
+							object.position.add( _tempVector.setFromMatrixPosition( object.parent.matrixWorld ) );
+
+						}
+
+						if ( axis.search( 'X' ) !== - 1 ) {
+
+							object.position.x = Math.round( object.position.x / this.translationSnap ) * this.translationSnap;
+
+						}
+
+						if ( axis.search( 'Y' ) !== - 1 ) {
+
+							object.position.y = Math.round( object.position.y / this.translationSnap ) * this.translationSnap;
+
+						}
+
+						if ( axis.search( 'Z' ) !== - 1 ) {
+
+							object.position.z = Math.round( object.position.z / this.translationSnap ) * this.translationSnap;
+
+						}
+
+						if ( object.parent ) {
+
+							object.position.sub( _tempVector.setFromMatrixPosition( object.parent.matrixWorld ) );
+
+						}
+
+					}
+
+				}
+
+			} else if ( mode === 'scale' ) {
+
+				if ( axis.search( 'XYZ' ) !== - 1 ) {
+
+					let d = this.pointEnd.length() / this.pointStart.length();
+					if ( this.pointEnd.dot( this.pointStart ) < 0 ) d *= - 1;
+
+					_tempVector2.set( d, d, d );
+
+				} else {
+
+					_tempVector.copy( this.pointStart );
+
+					_tempVector2.copy( this.pointEnd );
+
+					_tempVector.applyQuaternion( this._worldQuaternionInv );
+
+					_tempVector2.applyQuaternion( this._worldQuaternionInv );
+
+					_tempVector2.divide( _tempVector );
+
+					if ( axis.search( 'X' ) === - 1 ) {
+
+						_tempVector2.x = 1;
+
+					}
+
+					if ( axis.search( 'Y' ) === - 1 ) {
+
+						_tempVector2.y = 1;
+
+					}
+
+					if ( axis.search( 'Z' ) === - 1 ) {
+
+						_tempVector2.z = 1;
+
+					}
+
+				} // Apply scale
+
+
+				object.scale.copy( this._scaleStart ).multiply( _tempVector2 );
+
+				if ( this.scaleSnap ) {
+
+					if ( axis.search( 'X' ) !== - 1 ) {
+
+						object.scale.x = Math.round( object.scale.x / this.scaleSnap ) * this.scaleSnap || this.scaleSnap;
+
+					}
+
+					if ( axis.search( 'Y' ) !== - 1 ) {
+
+						object.scale.y = Math.round( object.scale.y / this.scaleSnap ) * this.scaleSnap || this.scaleSnap;
+
+					}
+
+					if ( axis.search( 'Z' ) !== - 1 ) {
+
+						object.scale.z = Math.round( object.scale.z / this.scaleSnap ) * this.scaleSnap || this.scaleSnap;
+
+					}
+
+				}
+
+			} else if ( mode === 'rotate' ) {
+
+				this._offset.copy( this.pointEnd ).sub( this.pointStart );
+
+				const ROTATION_SPEED = 20 / this.worldPosition.distanceTo( _tempVector.setFromMatrixPosition( this.camera.matrixWorld ) );
+
+				if ( axis === 'E' ) {
+
+					this.rotationAxis.copy( this.eye );
+					this.rotationAngle = this.pointEnd.angleTo( this.pointStart );
+
+					this._startNorm.copy( this.pointStart ).normalize();
+
+					this._endNorm.copy( this.pointEnd ).normalize();
+
+					this.rotationAngle *= this._endNorm.cross( this._startNorm ).dot( this.eye ) < 0 ? 1 : - 1;
+
+				} else if ( axis === 'XYZE' ) {
+
+					this.rotationAxis.copy( this._offset ).cross( this.eye ).normalize();
+					this.rotationAngle = this._offset.dot( _tempVector.copy( this.rotationAxis ).cross( this.eye ) ) * ROTATION_SPEED;
+
+				} else if ( axis === 'X' || axis === 'Y' || axis === 'Z' ) {
+
+					this.rotationAxis.copy( _unit[ axis ] );
+
+					_tempVector.copy( _unit[ axis ] );
+
+					if ( space === 'local' ) {
+
+						_tempVector.applyQuaternion( this.worldQuaternion );
+
+					}
+
+					this.rotationAngle = this._offset.dot( _tempVector.cross( this.eye ).normalize() ) * ROTATION_SPEED;
+
+				} // Apply rotation snap
+
+
+				if ( this.rotationSnap ) this.rotationAngle = Math.round( this.rotationAngle / this.rotationSnap ) * this.rotationSnap; // Apply rotate
+
+				if ( space === 'local' && axis !== 'E' && axis !== 'XYZE' ) {
+
+					object.quaternion.copy( this._quaternionStart );
+					object.quaternion.multiply( _tempQuaternion.setFromAxisAngle( this.rotationAxis, this.rotationAngle ) ).normalize();
+
+				} else {
+
+					this.rotationAxis.applyQuaternion( this._parentQuaternionInv );
+					object.quaternion.copy( _tempQuaternion.setFromAxisAngle( this.rotationAxis, this.rotationAngle ) );
+					object.quaternion.multiply( this._quaternionStart ).normalize();
+
+				}
+
+			}
+
+			this.dispatchEvent( _changeEvent );
+			this.dispatchEvent( _objectChangeEvent );
+
+		}
+
+		pointerUp( pointer ) {
+
+			if ( pointer.button !== 0 ) return;
+
+			if ( this.dragging && this.axis !== null ) {
+
+				_mouseUpEvent.mode = this.mode;
+				this.dispatchEvent( _mouseUpEvent );
+
+			}
+
+			this.dragging = false;
+			this.axis = null;
+
+		}
+
+		dispose() {
+
+			this.domElement.removeEventListener( 'pointerdown', this._onPointerDown );
+			this.domElement.removeEventListener( 'pointermove', this._onPointerHover );
+			this.domElement.removeEventListener( 'pointermove', this._onPointerMove );
+			this.domElement.removeEventListener( 'pointerup', this._onPointerUp );
+			this.traverse( function ( child ) {
+
+				if ( child.geometry ) child.geometry.dispose();
+				if ( child.material ) child.material.dispose();
+
+			} );
+
+		} // Set current object
+
+
+		attach( object ) {
+
+			this.object = object;
+			this.visible = true;
+			return this;
+
+		} // Detatch from object
+
+
+		detach() {
+
+			this.object = undefined;
+			this.visible = false;
+			this.axis = null;
+			return this;
+
+		}
+
+		reset() {
+
+			if ( ! this.enabled ) return;
+
+			if ( this.dragging ) {
+
+				this.object.position.copy( this._positionStart );
+				this.object.quaternion.copy( this._quaternionStart );
+				this.object.scale.copy( this._scaleStart );
+				this.dispatchEvent( _changeEvent );
+				this.dispatchEvent( _objectChangeEvent );
+				this.pointStart.copy( this.pointEnd );
+
+			}
+
+		}
+
+		getRaycaster() {
+
+			return _raycaster;
+
+		} // TODO: deprecate
+
+
+		getMode() {
+
+			return this.mode;
+
+		}
+
+		setMode( mode ) {
+
+			this.mode = mode;
+
+		}
+
+		setTranslationSnap( translationSnap ) {
+
+			this.translationSnap = translationSnap;
+
+		}
+
+		setRotationSnap( rotationSnap ) {
+
+			this.rotationSnap = rotationSnap;
+
+		}
+
+		setScaleSnap( scaleSnap ) {
+
+			this.scaleSnap = scaleSnap;
+
+		}
+
+		setSize( size ) {
+
+			this.size = size;
+
+		}
+
+		setSpace( space ) {
+
+			this.space = space;
+
+		}
+
+		update() {
+
+			console.warn( 'THREE.TransformControls: update function has no more functionality and therefore has been deprecated.' );
+
+		}
+
+	}
+
+	TransformControls.prototype.isTransformControls = true; // mouse / touch event handlers
+
+	function getPointer( event ) {
+
+		if ( this.domElement.ownerDocument.pointerLockElement ) {
+
+			return {
+				x: 0,
+				y: 0,
+				button: event.button
+			};
+
+		} else {
+
+			const rect = this.domElement.getBoundingClientRect();
+			return {
+				x: ( event.clientX - rect.left ) / rect.width * 2 - 1,
+				y: - ( event.clientY - rect.top ) / rect.height * 2 + 1,
+				button: event.button
+			};
+
+		}
+
+	}
+
+	function onPointerHover( event ) {
+
+		if ( ! this.enabled ) return;
+
+		switch ( event.pointerType ) {
+
+			case 'mouse':
+			case 'pen':
+				this.pointerHover( this._getPointer( event ) );
+				break;
+
+		}
+
+	}
+
+	function onPointerDown( event ) {
+
+		if ( ! this.enabled ) return;
+
+		if ( ! document.pointerLockElement ) {
+
+			this.domElement.setPointerCapture( event.pointerId );
+
+		}
+
+		this.domElement.addEventListener( 'pointermove', this._onPointerMove );
+		this.pointerHover( this._getPointer( event ) );
+		this.pointerDown( this._getPointer( event ) );
+
+	}
+
+	function onPointerMove( event ) {
+
+		if ( ! this.enabled ) return;
+		this.pointerMove( this._getPointer( event ) );
+
+	}
+
+	function onPointerUp( event ) {
+
+		if ( ! this.enabled ) return;
+		this.domElement.releasePointerCapture( event.pointerId );
+		this.domElement.removeEventListener( 'pointermove', this._onPointerMove );
+		this.pointerUp( this._getPointer( event ) );
+
+	}
+
+	function intersectObjectWithRay( object, raycaster, includeInvisible ) {
+
+		const allIntersections = raycaster.intersectObject( object, true );
+
+		for ( let i = 0; i < allIntersections.length; i ++ ) {
+
+			if ( allIntersections[ i ].object.visible || includeInvisible ) {
+
+				return allIntersections[ i ];
+
+			}
+
+		}
+
+		return false;
+
+	} //
+	// Reusable utility variables
+
+
+	const _tempEuler = new THREE.Euler();
+
+	const _alignVector = new THREE.Vector3( 0, 1, 0 );
+
+	const _zeroVector = new THREE.Vector3( 0, 0, 0 );
+
+	const _lookAtMatrix = new THREE.Matrix4();
+
+	const _tempQuaternion2 = new THREE.Quaternion();
+
+	const _identityQuaternion = new THREE.Quaternion();
+
+	const _dirVector = new THREE.Vector3();
+
+	const _tempMatrix = new THREE.Matrix4();
+
+	const _unitX = new THREE.Vector3( 1, 0, 0 );
+
+	const _unitY = new THREE.Vector3( 0, 1, 0 );
+
+	const _unitZ = new THREE.Vector3( 0, 0, 1 );
+
+	const _v1 = new THREE.Vector3();
+
+	const _v2 = new THREE.Vector3();
+
+	const _v3 = new THREE.Vector3();
+
+	class TransformControlsGizmo extends THREE.Object3D {
+
+		constructor() {
+
+			super();
+			this.type = 'TransformControlsGizmo'; // shared materials
+
+			const gizmoMaterial = new THREE.MeshBasicMaterial( {
+				depthTest: false,
+				depthWrite: false,
+				fog: false,
+				toneMapped: false,
+				transparent: true
+			} );
+			const gizmoLineMaterial = new THREE.LineBasicMaterial( {
+				depthTest: false,
+				depthWrite: false,
+				fog: false,
+				toneMapped: false,
+				transparent: true
+			} ); // Make unique material for each axis/color
+
+			const matInvisible = gizmoMaterial.clone();
+			matInvisible.opacity = 0.15;
+			const matHelper = gizmoLineMaterial.clone();
+			matHelper.opacity = 0.5;
+			const matRed = gizmoMaterial.clone();
+			matRed.color.setHex( 0xff0000 );
+			const matGreen = gizmoMaterial.clone();
+			matGreen.color.setHex( 0x00ff00 );
+			const matBlue = gizmoMaterial.clone();
+			matBlue.color.setHex( 0x0000ff );
+			const matRedTransparent = gizmoMaterial.clone();
+			matRedTransparent.color.setHex( 0xff0000 );
+			matRedTransparent.opacity = 0.5;
+			const matGreenTransparent = gizmoMaterial.clone();
+			matGreenTransparent.color.setHex( 0x00ff00 );
+			matGreenTransparent.opacity = 0.5;
+			const matBlueTransparent = gizmoMaterial.clone();
+			matBlueTransparent.color.setHex( 0x0000ff );
+			matBlueTransparent.opacity = 0.5;
+			const matWhiteTransparent = gizmoMaterial.clone();
+			matWhiteTransparent.opacity = 0.25;
+			const matYellowTransparent = gizmoMaterial.clone();
+			matYellowTransparent.color.setHex( 0xffff00 );
+			matYellowTransparent.opacity = 0.25;
+			const matYellow = gizmoMaterial.clone();
+			matYellow.color.setHex( 0xffff00 );
+			const matGray = gizmoMaterial.clone();
+			matGray.color.setHex( 0x787878 ); // reusable geometry
+
+			const arrowGeometry = new THREE.CylinderGeometry( 0, 0.04, 0.1, 12 );
+			arrowGeometry.translate( 0, 0.05, 0 );
+			const scaleHandleGeometry = new THREE.BoxGeometry( 0.08, 0.08, 0.08 );
+			scaleHandleGeometry.translate( 0, 0.04, 0 );
+			const lineGeometry = new THREE.BufferGeometry();
+			lineGeometry.setAttribute( 'position', new THREE.Float32BufferAttribute( [ 0, 0, 0, 1, 0, 0 ], 3 ) );
+			const lineGeometry2 = new THREE.CylinderGeometry( 0.0075, 0.0075, 0.5, 3 );
+			lineGeometry2.translate( 0, 0.25, 0 );
+
+			function CircleGeometry( radius, arc ) {
+
+				const geometry = new THREE.TorusGeometry( radius, 0.0075, 3, 64, arc * Math.PI * 2 );
+				geometry.rotateY( Math.PI / 2 );
+				geometry.rotateX( Math.PI / 2 );
+				return geometry;
+
+			} // Special geometry for transform helper. If scaled with position vector it spans from [0,0,0] to position
+
+
+			function TranslateHelperGeometry() {
+
+				const geometry = new THREE.BufferGeometry();
+				geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( [ 0, 0, 0, 1, 1, 1 ], 3 ) );
+				return geometry;
+
+			} // Gizmo definitions - custom hierarchy definitions for setupGizmo() function
+
+
+			const gizmoTranslate = {
+				X: [[ new THREE.Mesh( arrowGeometry, matRed ), [ 0.5, 0, 0 ], [ 0, 0, - Math.PI / 2 ]], [ new THREE.Mesh( arrowGeometry, matRed ), [ - 0.5, 0, 0 ], [ 0, 0, Math.PI / 2 ]], [ new THREE.Mesh( lineGeometry2, matRed ), [ 0, 0, 0 ], [ 0, 0, - Math.PI / 2 ]]],
+				Y: [[ new THREE.Mesh( arrowGeometry, matGreen ), [ 0, 0.5, 0 ]], [ new THREE.Mesh( arrowGeometry, matGreen ), [ 0, - 0.5, 0 ], [ Math.PI, 0, 0 ]], [ new THREE.Mesh( lineGeometry2, matGreen ) ]],
+				Z: [[ new THREE.Mesh( arrowGeometry, matBlue ), [ 0, 0, 0.5 ], [ Math.PI / 2, 0, 0 ]], [ new THREE.Mesh( arrowGeometry, matBlue ), [ 0, 0, - 0.5 ], [ - Math.PI / 2, 0, 0 ]], [ new THREE.Mesh( lineGeometry2, matBlue ), null, [ Math.PI / 2, 0, 0 ]]],
+				XYZ: [[ new THREE.Mesh( new THREE.OctahedronGeometry( 0.1, 0 ), matWhiteTransparent.clone() ), [ 0, 0, 0 ]]],
+				XY: [[ new THREE.Mesh( new THREE.BoxGeometry( 0.15, 0.15, 0.01 ), matBlueTransparent.clone() ), [ 0.15, 0.15, 0 ]]],
+				YZ: [[ new THREE.Mesh( new THREE.BoxGeometry( 0.15, 0.15, 0.01 ), matRedTransparent.clone() ), [ 0, 0.15, 0.15 ], [ 0, Math.PI / 2, 0 ]]],
+				XZ: [[ new THREE.Mesh( new THREE.BoxGeometry( 0.15, 0.15, 0.01 ), matGreenTransparent.clone() ), [ 0.15, 0, 0.15 ], [ - Math.PI / 2, 0, 0 ]]]
+			};
+			const pickerTranslate = {
+				X: [[ new THREE.Mesh( new THREE.CylinderGeometry( 0.2, 0, 0.6, 4 ), matInvisible ), [ 0.3, 0, 0 ], [ 0, 0, - Math.PI / 2 ]], [ new THREE.Mesh( new THREE.CylinderGeometry( 0.2, 0, 0.6, 4 ), matInvisible ), [ - 0.3, 0, 0 ], [ 0, 0, Math.PI / 2 ]]],
+				Y: [[ new THREE.Mesh( new THREE.CylinderGeometry( 0.2, 0, 0.6, 4 ), matInvisible ), [ 0, 0.3, 0 ]], [ new THREE.Mesh( new THREE.CylinderGeometry( 0.2, 0, 0.6, 4 ), matInvisible ), [ 0, - 0.3, 0 ], [ 0, 0, Math.PI ]]],
+				Z: [[ new THREE.Mesh( new THREE.CylinderGeometry( 0.2, 0, 0.6, 4 ), matInvisible ), [ 0, 0, 0.3 ], [ Math.PI / 2, 0, 0 ]], [ new THREE.Mesh( new THREE.CylinderGeometry( 0.2, 0, 0.6, 4 ), matInvisible ), [ 0, 0, - 0.3 ], [ - Math.PI / 2, 0, 0 ]]],
+				XYZ: [[ new THREE.Mesh( new THREE.OctahedronGeometry( 0.2, 0 ), matInvisible ) ]],
+				XY: [[ new THREE.Mesh( new THREE.BoxGeometry( 0.2, 0.2, 0.01 ), matInvisible ), [ 0.15, 0.15, 0 ]]],
+				YZ: [[ new THREE.Mesh( new THREE.BoxGeometry( 0.2, 0.2, 0.01 ), matInvisible ), [ 0, 0.15, 0.15 ], [ 0, Math.PI / 2, 0 ]]],
+				XZ: [[ new THREE.Mesh( new THREE.BoxGeometry( 0.2, 0.2, 0.01 ), matInvisible ), [ 0.15, 0, 0.15 ], [ - Math.PI / 2, 0, 0 ]]]
+			};
+			const helperTranslate = {
+				START: [[ new THREE.Mesh( new THREE.OctahedronGeometry( 0.01, 2 ), matHelper ), null, null, null, 'helper' ]],
+				END: [[ new THREE.Mesh( new THREE.OctahedronGeometry( 0.01, 2 ), matHelper ), null, null, null, 'helper' ]],
+				DELTA: [[ new THREE.Line( TranslateHelperGeometry(), matHelper ), null, null, null, 'helper' ]],
+				X: [[ new THREE.Line( lineGeometry, matHelper.clone() ), [ - 1e3, 0, 0 ], null, [ 1e6, 1, 1 ], 'helper' ]],
+				Y: [[ new THREE.Line( lineGeometry, matHelper.clone() ), [ 0, - 1e3, 0 ], [ 0, 0, Math.PI / 2 ], [ 1e6, 1, 1 ], 'helper' ]],
+				Z: [[ new THREE.Line( lineGeometry, matHelper.clone() ), [ 0, 0, - 1e3 ], [ 0, - Math.PI / 2, 0 ], [ 1e6, 1, 1 ], 'helper' ]]
+			};
+			const gizmoRotate = {
+				XYZE: [[ new THREE.Mesh( CircleGeometry( 0.5, 1 ), matGray ), null, [ 0, Math.PI / 2, 0 ]]],
+				X: [[ new THREE.Mesh( CircleGeometry( 0.5, 0.5 ), matRed ) ]],
+				Y: [[ new THREE.Mesh( CircleGeometry( 0.5, 0.5 ), matGreen ), null, [ 0, 0, - Math.PI / 2 ]]],
+				Z: [[ new THREE.Mesh( CircleGeometry( 0.5, 0.5 ), matBlue ), null, [ 0, Math.PI / 2, 0 ]]],
+				E: [[ new THREE.Mesh( CircleGeometry( 0.75, 1 ), matYellowTransparent ), null, [ 0, Math.PI / 2, 0 ]]]
+			};
+			const helperRotate = {
+				AXIS: [[ new THREE.Line( lineGeometry, matHelper.clone() ), [ - 1e3, 0, 0 ], null, [ 1e6, 1, 1 ], 'helper' ]]
+			};
+			const pickerRotate = {
+				XYZE: [[ new THREE.Mesh( new THREE.SphereGeometry( 0.25, 10, 8 ), matInvisible ) ]],
+				X: [[ new THREE.Mesh( new THREE.TorusGeometry( 0.5, 0.1, 4, 24 ), matInvisible ), [ 0, 0, 0 ], [ 0, - Math.PI / 2, - Math.PI / 2 ]]],
+				Y: [[ new THREE.Mesh( new THREE.TorusGeometry( 0.5, 0.1, 4, 24 ), matInvisible ), [ 0, 0, 0 ], [ Math.PI / 2, 0, 0 ]]],
+				Z: [[ new THREE.Mesh( new THREE.TorusGeometry( 0.5, 0.1, 4, 24 ), matInvisible ), [ 0, 0, 0 ], [ 0, 0, - Math.PI / 2 ]]],
+				E: [[ new THREE.Mesh( new THREE.TorusGeometry( 0.75, 0.1, 2, 24 ), matInvisible ) ]]
+			};
+			const gizmoScale = {
+				X: [[ new THREE.Mesh( scaleHandleGeometry, matRed ), [ 0.5, 0, 0 ], [ 0, 0, - Math.PI / 2 ]], [ new THREE.Mesh( lineGeometry2, matRed ), [ 0, 0, 0 ], [ 0, 0, - Math.PI / 2 ]], [ new THREE.Mesh( scaleHandleGeometry, matRed ), [ - 0.5, 0, 0 ], [ 0, 0, Math.PI / 2 ]]],
+				Y: [[ new THREE.Mesh( scaleHandleGeometry, matGreen ), [ 0, 0.5, 0 ]], [ new THREE.Mesh( lineGeometry2, matGreen ) ], [ new THREE.Mesh( scaleHandleGeometry, matGreen ), [ 0, - 0.5, 0 ], [ 0, 0, Math.PI ]]],
+				Z: [[ new THREE.Mesh( scaleHandleGeometry, matBlue ), [ 0, 0, 0.5 ], [ Math.PI / 2, 0, 0 ]], [ new THREE.Mesh( lineGeometry2, matBlue ), [ 0, 0, 0 ], [ Math.PI / 2, 0, 0 ]], [ new THREE.Mesh( scaleHandleGeometry, matBlue ), [ 0, 0, - 0.5 ], [ - Math.PI / 2, 0, 0 ]]],
+				XY: [[ new THREE.Mesh( new THREE.BoxGeometry( 0.15, 0.15, 0.01 ), matBlueTransparent ), [ 0.15, 0.15, 0 ]]],
+				YZ: [[ new THREE.Mesh( new THREE.BoxGeometry( 0.15, 0.15, 0.01 ), matRedTransparent ), [ 0, 0.15, 0.15 ], [ 0, Math.PI / 2, 0 ]]],
+				XZ: [[ new THREE.Mesh( new THREE.BoxGeometry( 0.15, 0.15, 0.01 ), matGreenTransparent ), [ 0.15, 0, 0.15 ], [ - Math.PI / 2, 0, 0 ]]],
+				XYZ: [[ new THREE.Mesh( new THREE.BoxGeometry( 0.1, 0.1, 0.1 ), matWhiteTransparent.clone() ) ]]
+			};
+			const pickerScale = {
+				X: [[ new THREE.Mesh( new THREE.CylinderGeometry( 0.2, 0, 0.6, 4 ), matInvisible ), [ 0.3, 0, 0 ], [ 0, 0, - Math.PI / 2 ]], [ new THREE.Mesh( new THREE.CylinderGeometry( 0.2, 0, 0.6, 4 ), matInvisible ), [ - 0.3, 0, 0 ], [ 0, 0, Math.PI / 2 ]]],
+				Y: [[ new THREE.Mesh( new THREE.CylinderGeometry( 0.2, 0, 0.6, 4 ), matInvisible ), [ 0, 0.3, 0 ]], [ new THREE.Mesh( new THREE.CylinderGeometry( 0.2, 0, 0.6, 4 ), matInvisible ), [ 0, - 0.3, 0 ], [ 0, 0, Math.PI ]]],
+				Z: [[ new THREE.Mesh( new THREE.CylinderGeometry( 0.2, 0, 0.6, 4 ), matInvisible ), [ 0, 0, 0.3 ], [ Math.PI / 2, 0, 0 ]], [ new THREE.Mesh( new THREE.CylinderGeometry( 0.2, 0, 0.6, 4 ), matInvisible ), [ 0, 0, - 0.3 ], [ - Math.PI / 2, 0, 0 ]]],
+				XY: [[ new THREE.Mesh( new THREE.BoxGeometry( 0.2, 0.2, 0.01 ), matInvisible ), [ 0.15, 0.15, 0 ]]],
+				YZ: [[ new THREE.Mesh( new THREE.BoxGeometry( 0.2, 0.2, 0.01 ), matInvisible ), [ 0, 0.15, 0.15 ], [ 0, Math.PI / 2, 0 ]]],
+				XZ: [[ new THREE.Mesh( new THREE.BoxGeometry( 0.2, 0.2, 0.01 ), matInvisible ), [ 0.15, 0, 0.15 ], [ - Math.PI / 2, 0, 0 ]]],
+				XYZ: [[ new THREE.Mesh( new THREE.BoxGeometry( 0.2, 0.2, 0.2 ), matInvisible ), [ 0, 0, 0 ]]]
+			};
+			const helperScale = {
+				X: [[ new THREE.Line( lineGeometry, matHelper.clone() ), [ - 1e3, 0, 0 ], null, [ 1e6, 1, 1 ], 'helper' ]],
+				Y: [[ new THREE.Line( lineGeometry, matHelper.clone() ), [ 0, - 1e3, 0 ], [ 0, 0, Math.PI / 2 ], [ 1e6, 1, 1 ], 'helper' ]],
+				Z: [[ new THREE.Line( lineGeometry, matHelper.clone() ), [ 0, 0, - 1e3 ], [ 0, - Math.PI / 2, 0 ], [ 1e6, 1, 1 ], 'helper' ]]
+			}; // Creates an THREE.Object3D with gizmos described in custom hierarchy definition.
+
+			function setupGizmo( gizmoMap ) {
+
+				const gizmo = new THREE.Object3D();
+
+				for ( const name in gizmoMap ) {
+
+					for ( let i = gizmoMap[ name ].length; i --; ) {
+
+						const object = gizmoMap[ name ][ i ][ 0 ].clone();
+						const position = gizmoMap[ name ][ i ][ 1 ];
+						const rotation = gizmoMap[ name ][ i ][ 2 ];
+						const scale = gizmoMap[ name ][ i ][ 3 ];
+						const tag = gizmoMap[ name ][ i ][ 4 ]; // name and tag properties are essential for picking and updating logic.
+
+						object.name = name;
+						object.tag = tag;
+
+						if ( position ) {
+
+							object.position.set( position[ 0 ], position[ 1 ], position[ 2 ] );
+
+						}
+
+						if ( rotation ) {
+
+							object.rotation.set( rotation[ 0 ], rotation[ 1 ], rotation[ 2 ] );
+
+						}
+
+						if ( scale ) {
+
+							object.scale.set( scale[ 0 ], scale[ 1 ], scale[ 2 ] );
+
+						}
+
+						object.updateMatrix();
+						const tempGeometry = object.geometry.clone();
+						tempGeometry.applyMatrix4( object.matrix );
+						object.geometry = tempGeometry;
+						object.renderOrder = Infinity;
+						object.position.set( 0, 0, 0 );
+						object.rotation.set( 0, 0, 0 );
+						object.scale.set( 1, 1, 1 );
+						gizmo.add( object );
+
+					}
+
+				}
+
+				return gizmo;
+
+			} // Gizmo creation
+
+
+			this.gizmo = {};
+			this.picker = {};
+			this.helper = {};
+			this.add( this.gizmo[ 'translate' ] = setupGizmo( gizmoTranslate ) );
+			this.add( this.gizmo[ 'rotate' ] = setupGizmo( gizmoRotate ) );
+			this.add( this.gizmo[ 'scale' ] = setupGizmo( gizmoScale ) );
+			this.add( this.picker[ 'translate' ] = setupGizmo( pickerTranslate ) );
+			this.add( this.picker[ 'rotate' ] = setupGizmo( pickerRotate ) );
+			this.add( this.picker[ 'scale' ] = setupGizmo( pickerScale ) );
+			this.add( this.helper[ 'translate' ] = setupGizmo( helperTranslate ) );
+			this.add( this.helper[ 'rotate' ] = setupGizmo( helperRotate ) );
+			this.add( this.helper[ 'scale' ] = setupGizmo( helperScale ) ); // Pickers should be hidden always
+
+			this.picker[ 'translate' ].visible = false;
+			this.picker[ 'rotate' ].visible = false;
+			this.picker[ 'scale' ].visible = false;
+
+		} // updateMatrixWorld will update transformations and appearance of individual handles
+
+
+		updateMatrixWorld( force ) {
+
+			const space = this.mode === 'scale' ? 'local' : this.space; // scale always oriented to local rotation
+
+			const quaternion = space === 'local' ? this.worldQuaternion : _identityQuaternion; // Show only gizmos for current transform mode
+
+			this.gizmo[ 'translate' ].visible = this.mode === 'translate';
+			this.gizmo[ 'rotate' ].visible = this.mode === 'rotate';
+			this.gizmo[ 'scale' ].visible = this.mode === 'scale';
+			this.helper[ 'translate' ].visible = this.mode === 'translate';
+			this.helper[ 'rotate' ].visible = this.mode === 'rotate';
+			this.helper[ 'scale' ].visible = this.mode === 'scale';
+			let handles = [];
+			handles = handles.concat( this.picker[ this.mode ].children );
+			handles = handles.concat( this.gizmo[ this.mode ].children );
+			handles = handles.concat( this.helper[ this.mode ].children );
+
+			for ( let i = 0; i < handles.length; i ++ ) {
+
+				const handle = handles[ i ]; // hide aligned to camera
+
+				handle.visible = true;
+				handle.rotation.set( 0, 0, 0 );
+				handle.position.copy( this.worldPosition );
+				let factor;
+
+				if ( this.camera.isOrthographicCamera ) {
+
+					factor = ( this.camera.top - this.camera.bottom ) / this.camera.zoom;
+
+				} else {
+
+					factor = this.worldPosition.distanceTo( this.cameraPosition ) * Math.min( 1.9 * Math.tan( Math.PI * this.camera.fov / 360 ) / this.camera.zoom, 7 );
+
+				}
+
+				handle.scale.set( 1, 1, 1 ).multiplyScalar( factor * this.size / 4 ); // TODO: simplify helpers and consider decoupling from gizmo
+
+				if ( handle.tag === 'helper' ) {
+
+					handle.visible = false;
+
+					if ( handle.name === 'AXIS' ) {
+
+						handle.position.copy( this.worldPositionStart );
+						handle.visible = !! this.axis;
+
+						if ( this.axis === 'X' ) {
+
+							_tempQuaternion.setFromEuler( _tempEuler.set( 0, 0, 0 ) );
+
+							handle.quaternion.copy( quaternion ).multiply( _tempQuaternion );
+
+							if ( Math.abs( _alignVector.copy( _unitX ).applyQuaternion( quaternion ).dot( this.eye ) ) > 0.9 ) {
+
+								handle.visible = false;
+
+							}
+
+						}
+
+						if ( this.axis === 'Y' ) {
+
+							_tempQuaternion.setFromEuler( _tempEuler.set( 0, 0, Math.PI / 2 ) );
+
+							handle.quaternion.copy( quaternion ).multiply( _tempQuaternion );
+
+							if ( Math.abs( _alignVector.copy( _unitY ).applyQuaternion( quaternion ).dot( this.eye ) ) > 0.9 ) {
+
+								handle.visible = false;
+
+							}
+
+						}
+
+						if ( this.axis === 'Z' ) {
+
+							_tempQuaternion.setFromEuler( _tempEuler.set( 0, Math.PI / 2, 0 ) );
+
+							handle.quaternion.copy( quaternion ).multiply( _tempQuaternion );
+
+							if ( Math.abs( _alignVector.copy( _unitZ ).applyQuaternion( quaternion ).dot( this.eye ) ) > 0.9 ) {
+
+								handle.visible = false;
+
+							}
+
+						}
+
+						if ( this.axis === 'XYZE' ) {
+
+							_tempQuaternion.setFromEuler( _tempEuler.set( 0, Math.PI / 2, 0 ) );
+
+							_alignVector.copy( this.rotationAxis );
+
+							handle.quaternion.setFromRotationMatrix( _lookAtMatrix.lookAt( _zeroVector, _alignVector, _unitY ) );
+							handle.quaternion.multiply( _tempQuaternion );
+							handle.visible = this.dragging;
+
+						}
+
+						if ( this.axis === 'E' ) {
+
+							handle.visible = false;
+
+						}
+
+					} else if ( handle.name === 'START' ) {
+
+						handle.position.copy( this.worldPositionStart );
+						handle.visible = this.dragging;
+
+					} else if ( handle.name === 'END' ) {
+
+						handle.position.copy( this.worldPosition );
+						handle.visible = this.dragging;
+
+					} else if ( handle.name === 'DELTA' ) {
+
+						handle.position.copy( this.worldPositionStart );
+						handle.quaternion.copy( this.worldQuaternionStart );
+
+						_tempVector.set( 1e-10, 1e-10, 1e-10 ).add( this.worldPositionStart ).sub( this.worldPosition ).multiplyScalar( - 1 );
+
+						_tempVector.applyQuaternion( this.worldQuaternionStart.clone().invert() );
+
+						handle.scale.copy( _tempVector );
+						handle.visible = this.dragging;
+
+					} else {
+
+						handle.quaternion.copy( quaternion );
+
+						if ( this.dragging ) {
+
+							handle.position.copy( this.worldPositionStart );
+
+						} else {
+
+							handle.position.copy( this.worldPosition );
+
+						}
+
+						if ( this.axis ) {
+
+							handle.visible = this.axis.search( handle.name ) !== - 1;
+
+						}
+
+					} // If updating helper, skip rest of the loop
+
+
+					continue;
+
+				} // Align handles to current local or world rotation
+
+
+				handle.quaternion.copy( quaternion );
+
+				if ( this.mode === 'translate' || this.mode === 'scale' ) {
+
+					// Hide translate and scale axis facing the camera
+					const AXIS_HIDE_TRESHOLD = 0.99;
+					const PLANE_HIDE_TRESHOLD = 0.2;
+
+					if ( handle.name === 'X' ) {
+
+						if ( Math.abs( _alignVector.copy( _unitX ).applyQuaternion( quaternion ).dot( this.eye ) ) > AXIS_HIDE_TRESHOLD ) {
+
+							handle.scale.set( 1e-10, 1e-10, 1e-10 );
+							handle.visible = false;
+
+						}
+
+					}
+
+					if ( handle.name === 'Y' ) {
+
+						if ( Math.abs( _alignVector.copy( _unitY ).applyQuaternion( quaternion ).dot( this.eye ) ) > AXIS_HIDE_TRESHOLD ) {
+
+							handle.scale.set( 1e-10, 1e-10, 1e-10 );
+							handle.visible = false;
+
+						}
+
+					}
+
+					if ( handle.name === 'Z' ) {
+
+						if ( Math.abs( _alignVector.copy( _unitZ ).applyQuaternion( quaternion ).dot( this.eye ) ) > AXIS_HIDE_TRESHOLD ) {
+
+							handle.scale.set( 1e-10, 1e-10, 1e-10 );
+							handle.visible = false;
+
+						}
+
+					}
+
+					if ( handle.name === 'XY' ) {
+
+						if ( Math.abs( _alignVector.copy( _unitZ ).applyQuaternion( quaternion ).dot( this.eye ) ) < PLANE_HIDE_TRESHOLD ) {
+
+							handle.scale.set( 1e-10, 1e-10, 1e-10 );
+							handle.visible = false;
+
+						}
+
+					}
+
+					if ( handle.name === 'YZ' ) {
+
+						if ( Math.abs( _alignVector.copy( _unitX ).applyQuaternion( quaternion ).dot( this.eye ) ) < PLANE_HIDE_TRESHOLD ) {
+
+							handle.scale.set( 1e-10, 1e-10, 1e-10 );
+							handle.visible = false;
+
+						}
+
+					}
+
+					if ( handle.name === 'XZ' ) {
+
+						if ( Math.abs( _alignVector.copy( _unitY ).applyQuaternion( quaternion ).dot( this.eye ) ) < PLANE_HIDE_TRESHOLD ) {
+
+							handle.scale.set( 1e-10, 1e-10, 1e-10 );
+							handle.visible = false;
+
+						}
+
+					}
+
+				} else if ( this.mode === 'rotate' ) {
+
+					// Align handles to current local or world rotation
+					_tempQuaternion2.copy( quaternion );
+
+					_alignVector.copy( this.eye ).applyQuaternion( _tempQuaternion.copy( quaternion ).invert() );
+
+					if ( handle.name.search( 'E' ) !== - 1 ) {
+
+						handle.quaternion.setFromRotationMatrix( _lookAtMatrix.lookAt( this.eye, _zeroVector, _unitY ) );
+
+					}
+
+					if ( handle.name === 'X' ) {
+
+						_tempQuaternion.setFromAxisAngle( _unitX, Math.atan2( - _alignVector.y, _alignVector.z ) );
+
+						_tempQuaternion.multiplyQuaternions( _tempQuaternion2, _tempQuaternion );
+
+						handle.quaternion.copy( _tempQuaternion );
+
+					}
+
+					if ( handle.name === 'Y' ) {
+
+						_tempQuaternion.setFromAxisAngle( _unitY, Math.atan2( _alignVector.x, _alignVector.z ) );
+
+						_tempQuaternion.multiplyQuaternions( _tempQuaternion2, _tempQuaternion );
+
+						handle.quaternion.copy( _tempQuaternion );
+
+					}
+
+					if ( handle.name === 'Z' ) {
+
+						_tempQuaternion.setFromAxisAngle( _unitZ, Math.atan2( _alignVector.y, _alignVector.x ) );
+
+						_tempQuaternion.multiplyQuaternions( _tempQuaternion2, _tempQuaternion );
+
+						handle.quaternion.copy( _tempQuaternion );
+
+					}
+
+				} // Hide disabled axes
+
+
+				handle.visible = handle.visible && ( handle.name.indexOf( 'X' ) === - 1 || this.showX );
+				handle.visible = handle.visible && ( handle.name.indexOf( 'Y' ) === - 1 || this.showY );
+				handle.visible = handle.visible && ( handle.name.indexOf( 'Z' ) === - 1 || this.showZ );
+				handle.visible = handle.visible && ( handle.name.indexOf( 'E' ) === - 1 || this.showX && this.showY && this.showZ ); // highlight selected axis
+
+				handle.material._color = handle.material._color || handle.material.color.clone();
+				handle.material._opacity = handle.material._opacity || handle.material.opacity;
+				handle.material.color.copy( handle.material._color );
+				handle.material.opacity = handle.material._opacity;
+
+				if ( this.enabled && this.axis ) {
+
+					if ( handle.name === this.axis ) {
+
+						handle.material.color.setHex( 0xffff00 );
+						handle.material.opacity = 1.0;
+
+					} else if ( this.axis.split( '' ).some( function ( a ) {
+
+						return handle.name === a;
+
+					} ) ) {
+
+						handle.material.color.setHex( 0xffff00 );
+						handle.material.opacity = 1.0;
+
+					}
+
+				}
+
+			}
+
+			super.updateMatrixWorld( force );
+
+		}
+
+	}
+
+	TransformControlsGizmo.prototype.isTransformControlsGizmo = true; //
+
+	class TransformControlsPlane extends THREE.Mesh {
+
+		constructor() {
+
+			super( new THREE.PlaneGeometry( 100000, 100000, 2, 2 ), new THREE.MeshBasicMaterial( {
+				visible: false,
+				wireframe: true,
+				side: THREE.DoubleSide,
+				transparent: true,
+				opacity: 0.1,
+				toneMapped: false
+			} ) );
+			this.type = 'TransformControlsPlane';
+
+		}
+
+		updateMatrixWorld( force ) {
+
+			let space = this.space;
+			this.position.copy( this.worldPosition );
+			if ( this.mode === 'scale' ) space = 'local'; // scale always oriented to local rotation
+
+			_v1.copy( _unitX ).applyQuaternion( space === 'local' ? this.worldQuaternion : _identityQuaternion );
+
+			_v2.copy( _unitY ).applyQuaternion( space === 'local' ? this.worldQuaternion : _identityQuaternion );
+
+			_v3.copy( _unitZ ).applyQuaternion( space === 'local' ? this.worldQuaternion : _identityQuaternion ); // Align the plane for current transform mode, axis and space.
+
+
+			_alignVector.copy( _v2 );
+
+			switch ( this.mode ) {
+
+				case 'translate':
+				case 'scale':
+					switch ( this.axis ) {
+
+						case 'X':
+							_alignVector.copy( this.eye ).cross( _v1 );
+
+							_dirVector.copy( _v1 ).cross( _alignVector );
+
+							break;
+
+						case 'Y':
+							_alignVector.copy( this.eye ).cross( _v2 );
+
+							_dirVector.copy( _v2 ).cross( _alignVector );
+
+							break;
+
+						case 'Z':
+							_alignVector.copy( this.eye ).cross( _v3 );
+
+							_dirVector.copy( _v3 ).cross( _alignVector );
+
+							break;
+
+						case 'XY':
+							_dirVector.copy( _v3 );
+
+							break;
+
+						case 'YZ':
+							_dirVector.copy( _v1 );
+
+							break;
+
+						case 'XZ':
+							_alignVector.copy( _v3 );
+
+							_dirVector.copy( _v2 );
+
+							break;
+
+						case 'XYZ':
+						case 'E':
+							_dirVector.set( 0, 0, 0 );
+
+							break;
+
+					}
+
+					break;
+
+				case 'rotate':
+				default:
+					// special case for rotate
+					_dirVector.set( 0, 0, 0 );
+
+			}
+
+			if ( _dirVector.length() === 0 ) {
+
+				// If in rotate mode, make the plane parallel to camera
+				this.quaternion.copy( this.cameraQuaternion );
+
+			} else {
+
+				_tempMatrix.lookAt( _tempVector.set( 0, 0, 0 ), _dirVector, _alignVector );
+
+				this.quaternion.setFromRotationMatrix( _tempMatrix );
+
+			}
+
+			super.updateMatrixWorld( force );
+
+		}
+
+	}
+
+	TransformControlsPlane.prototype.isTransformControlsPlane = true;
+
+	THREE.TransformControls = TransformControls;
+	THREE.TransformControlsGizmo = TransformControlsGizmo;
+	THREE.TransformControlsPlane = TransformControlsPlane;
 
 } )();
 
@@ -7194,6 +8659,9 @@ const uid = (p) => p + "_" + (Date.now().toString(36)) + "_" + (Math.random().to
    Three.js scene
 ---------------------------------------------------------------------------- */
 let renderer, labelRenderer, scene, perspCam, orthoCam, activeCam, controls;
+let transformControls;          // per-part move/rotate gizmo (Objects → Transform parts)
+let xformMode = false;          // is the transform-edit mode on?
+let gizmoMode = "translate";    // current gizmo: "translate" | "rotate"
 let modelRoot;      // holds loaded geometry; rotated so file "up" -> world +Y
 let markerRoot;     // child of modelRoot: measurements + annotations (file space)
 let gridHelper;
@@ -7229,6 +8697,20 @@ function initThree() {
   controls.dampingFactor = 0.08;
   controls.rotateSpeed = 0.9;
   controls.zoomToCursor = true;
+
+  // Per-part transform gizmo. Lives in the scene but stays detached/hidden until the
+  // Objects panel "Transform parts" toggle attaches it to a selected part's mesh.
+  transformControls = new THREE.TransformControls(activeCam, renderer.domElement);
+  transformControls.setMode("translate");   // switched at runtime by the floating Move/Rotate bar
+  transformControls.setSpace("world");
+  transformControls.setRotationSnap(null);   // free rotation; hold Shift to snap to 5° (see keydown/keyup)
+  transformControls.addEventListener("dragging-changed", (e) => { controls.enabled = !e.value; });
+  transformControls.addEventListener("mouseDown", onPartMoveStart);
+  transformControls.addEventListener("objectChange", onPartMoving);
+  transformControls.addEventListener("mouseUp", onPartMoveEnd);
+  transformControls.enabled = false;
+  transformControls.visible = false;
+  scene.add(transformControls);
 
   // Lighting: a hemisphere gradient (top brighter than bottom) gives every face a
   // readable tone — kept below clipping so even a white part shows falloff — plus a
@@ -7475,6 +8957,7 @@ function setProjection(mode) {
   to.up.copy(from.up);
   activeCam = to;
   controls.object = to;
+  if (transformControls) transformControls.camera = to;
   controls.update();
   $("btnProj").classList.toggle("active", mode === "ortho");
   $("btnProj").title = mode === "ortho" ? "Orthographic (click for perspective)" : "Perspective (click for orthographic)";
@@ -7554,6 +9037,30 @@ function registerObject(object3d, fileId, metaParts) {
     mesh.castShadow = true;       // each part shadows itself and the others
     mesh.receiveShadow = true;
     modelRoot.add(mesh);
+
+    // Two transform layers (see serializeState):
+    //  - loader*: the pristine geometry-space pose; the immutable anchor for saved deltas
+    //  - base*  : the baseline / reset-target ("Save transforms as default" shifts it here)
+    //  - mesh.* : the current pose (a move saved on top of the baseline)
+    part.loaderPos = mesh.position.clone();
+    part.loaderQuat = mesh.quaternion.clone();
+    part.loaderScale = mesh.scale.clone();
+
+    part.basePos = part.loaderPos.clone();
+    part.baseQuat = part.loaderQuat.clone();
+    part.baseScale = part.loaderScale.clone();
+    if (pm && pm.dpos) part.basePos.add(new THREE.Vector3().fromArray(pm.dpos));
+    if (pm && pm.dquat) part.baseQuat.fromArray(pm.dquat);
+    if (pm && pm.dscale) part.baseScale.fromArray(pm.dscale);
+
+    mesh.position.copy(part.basePos);
+    mesh.quaternion.copy(part.baseQuat);
+    mesh.scale.copy(part.baseScale);
+    if (pm && pm.pos) mesh.position.copy(part.basePos).add(new THREE.Vector3().fromArray(pm.pos));
+    if (pm && pm.quat) mesh.quaternion.fromArray(pm.quat);
+    if (pm && pm.scale) mesh.scale.fromArray(pm.scale);
+    mesh.updateMatrixWorld(true);
+
     state.parts.push(part);
   });
   return meshes.length;
@@ -7603,6 +9110,7 @@ function selectPart(id, fromList) {
     p.mesh.material.emissive.setHex(SELECT_EMIS);
     p.mesh.material.emissiveIntensity = 0.35;
   }
+  if (xformMode) { if (p) attachGizmo(id); else detachGizmo(); }
   refreshObjInfo();
   highlightRow(id);
 }
@@ -7613,11 +9121,193 @@ function deselect() {
     if (p) p.mesh.material.emissive.setHex(0x000000);
   }
   selectedId = null;
+  detachGizmo();
   refreshObjInfo();
   highlightRow(null);
 }
 
 function partById(id) { return state.parts.find((p) => p.id === id); }
+
+/* ----------------------------------------------------------------------------
+   Per-part transform (move / rotate gizmo)  —  Objects panel → "Transform parts"
+---------------------------------------------------------------------------- */
+// A part is "moved" when its mesh transform differs from the baseline captured at load.
+const XFORM_EPS = 1e-4;
+function partMoved(p) {
+  if (!p || !p.basePos) return false;
+  if (p.mesh.position.distanceToSquared(p.basePos) > XFORM_EPS * XFORM_EPS) return true;
+  if (p.mesh.scale.distanceToSquared(p.baseScale) > XFORM_EPS * XFORM_EPS) return true;
+  return p.mesh.quaternion.angleTo(p.baseQuat) > XFORM_EPS;
+}
+
+function attachGizmo(id) {
+  const p = partById(id);
+  if (!p) { detachGizmo(); return; }
+  transformControls.attach(p.mesh);
+  transformControls.setMode(gizmoMode);
+  transformControls.enabled = true;
+  transformControls.visible = true;
+  updatePartCoords();
+}
+function detachGizmo() {
+  if (!transformControls) return;
+  transformControls.detach();
+  transformControls.enabled = false;
+  transformControls.visible = false;
+  updatePartCoords();
+}
+
+function setXformMode(on) {
+  xformMode = on;
+  $("btnXform").classList.toggle("active", on);
+  document.body.classList.toggle("xediting", on);
+  $("xformBar").classList.toggle("show", on);
+  if (on) { const p = partById(selectedId); if (p) attachGizmo(selectedId); }
+  else { detachGizmo(); hideXformReadout(); }
+  updatePartCoords();
+}
+
+function setGizmoMode(m) {
+  gizmoMode = m;
+  if (transformControls) transformControls.setMode(m);
+  $("xfMove").classList.toggle("active", m === "translate");
+  $("xfRotate").classList.toggle("active", m === "rotate");
+}
+
+/* live read-out (distance while moving, angle while rotating) ---------------- */
+let dragStartPos = null, dragStartQuat = null;
+function showXformReadout(html) { const r = $("xformReadout"); r.innerHTML = html; r.classList.add("show"); }
+function hideXformReadout() { $("xformReadout").classList.remove("show"); }
+
+function onPartMoveStart() {
+  const o = transformControls.object;
+  if (!o) return;
+  dragStartPos = o.position.clone();
+  dragStartQuat = o.quaternion.clone();
+}
+// fires continuously while a handle is dragged
+function onPartMoving() {
+  const o = transformControls.object;
+  if (!o || !dragStartPos) return;
+  if (gizmoMode === "rotate") {
+    const deg = THREE.MathUtils.radToDeg(dragStartQuat.angleTo(o.quaternion));
+    showXformReadout('↻ <b>' + deg.toFixed(0) + '°</b>');
+  } else {
+    const d = o.position.clone().sub(dragStartPos);
+    showXformReadout('Δ ' + fmt(d.x) + ' · ' + fmt(d.y) + ' · ' + fmt(d.z) + ' mm · <b>' + fmt(d.length()) + ' mm</b>');
+  }
+  updatePartCoords();
+}
+
+// dragging a handle finished: keep dependent visuals in sync and surface the reset UI
+function onPartMoveEnd() {
+  hideXformReadout();
+  if (state.section.on) buildSection();
+  updateXformResetUI();
+  updatePartCoords();
+  refreshObjInfo();
+}
+
+function resetPartTransform(id) {
+  const p = partById(id);
+  if (!p) return;
+  p.mesh.position.copy(p.basePos);
+  p.mesh.quaternion.copy(p.baseQuat);
+  p.mesh.scale.copy(p.baseScale);
+  p.mesh.updateMatrixWorld(true);
+  if (state.section.on) buildSection();
+  updateXformResetUI();
+  updatePartCoords();
+  refreshObjInfo();
+}
+
+function resetAllTransforms() {
+  state.parts.forEach((p) => { p.mesh.position.copy(p.basePos); p.mesh.quaternion.copy(p.baseQuat); p.mesh.scale.copy(p.baseScale); p.mesh.updateMatrixWorld(true); });
+  if (state.section.on) buildSection();
+  updateXformResetUI();
+  updatePartCoords();
+  refreshObjInfo();
+}
+
+// bake the current poses into the baseline: Reset now returns here, and "Save file"
+// persists these as the default (no part is "moved" afterwards, so the reset UI hides)
+function saveTransformsAsDefault() {
+  closeMenu();
+  if (state.parts.length === 0) { toast("No parts loaded"); return; }
+  state.parts.forEach((p) => { p.basePos.copy(p.mesh.position); p.baseQuat.copy(p.mesh.quaternion); p.baseScale.copy(p.mesh.scale); });
+  updateXformResetUI();
+  updatePartCoords();
+  toast("Current transforms set as default");
+}
+
+// show the per-row + "Reset all" controls only when at least one part has been altered
+function updateXformResetUI() {
+  const any = state.parts.some(partMoved);
+  const btn = $("btnResetXform");
+  if (btn) btn.style.display = any ? "" : "none";
+  rebuildObjectsPanel();
+}
+
+// numeric fields for trimming, etc.; degrees with up to 1 dp, scale with up to 3 dp
+const fmtDeg = (d) => String(+(d).toFixed(1));
+const fmtScale = (s) => String(+(s).toFixed(3));
+const _euler = new THREE.Euler();
+
+// Position / rotation / scale fields for the selected part (visible only while transforming)
+function updatePartCoords() {
+  const box = $("partCoords");
+  if (!box) return;
+  const p = (xformMode && selectedId) ? partById(selectedId) : null;
+  if (!p) { box.style.display = "none"; return; }
+  box.style.display = "";
+  const m = p.mesh;
+  const af = document.activeElement;                       // don't clobber a field being typed into
+  const set = (id, val) => { const el = $(id); if (af !== el) el.value = val; };
+  set("posX", fmt(m.position.x)); set("posY", fmt(m.position.y)); set("posZ", fmt(m.position.z));
+  _euler.setFromQuaternion(m.quaternion, "XYZ");
+  set("rotX", fmtDeg(THREE.MathUtils.radToDeg(_euler.x)));
+  set("rotY", fmtDeg(THREE.MathUtils.radToDeg(_euler.y)));
+  set("rotZ", fmtDeg(THREE.MathUtils.radToDeg(_euler.z)));
+  set("scaleU", fmtScale(m.scale.x));
+}
+
+// commit a typed position coordinate
+function commitPartCoord(axis) {
+  if (!selectedId) return;
+  const p = partById(selectedId); if (!p) return;
+  const v = parseFloat($("pos" + axis.toUpperCase()).value);
+  if (isFinite(v)) { p.mesh.position[axis] = v; afterCoordEdit(p); }
+  updatePartCoords();
+}
+
+// commit typed rotation (Euler XYZ degrees, rebuilt from all three fields)
+function commitPartRot() {
+  if (!selectedId) return;
+  const p = partById(selectedId); if (!p) return;
+  const rx = parseFloat($("rotX").value), ry = parseFloat($("rotY").value), rz = parseFloat($("rotZ").value);
+  if (isFinite(rx) && isFinite(ry) && isFinite(rz)) {
+    _euler.set(THREE.MathUtils.degToRad(rx), THREE.MathUtils.degToRad(ry), THREE.MathUtils.degToRad(rz), "XYZ");
+    p.mesh.quaternion.setFromEuler(_euler);
+    afterCoordEdit(p);
+  }
+  updatePartCoords();
+}
+
+// commit typed uniform scale (overall, applied to all axes)
+function commitPartScale() {
+  if (!selectedId) return;
+  const p = partById(selectedId); if (!p) return;
+  const s = parseFloat($("scaleU").value);
+  if (isFinite(s) && s > 0) { p.mesh.scale.set(s, s, s); afterCoordEdit(p); }
+  updatePartCoords();
+}
+
+// shared follow-up after any typed transform edit
+function afterCoordEdit(p) {
+  p.mesh.updateMatrixWorld(true);
+  if (state.section.on) buildSection();
+  updateXformResetUI();
+}
 
 /* ----------------------------------------------------------------------------
    Pointer interaction (select / measure / annotate / remove-annot)
@@ -7666,6 +9356,8 @@ function onPointerDown(ev) {
 function onPointerUp(ev) {
   if (ev.button !== 0 || !downValid) return;
   downValid = false;
+  // a press on / drag of a gizmo handle is owned by TransformControls — never select/deselect
+  if (transformControls && (transformControls.dragging || transformControls.axis)) return;
   if (Math.hypot(ev.clientX - downX, ev.clientY - downY) > CLICK_SLOP) return; // was a drag → orbit
   handleClick(ev);
 }
@@ -7705,7 +9397,18 @@ function onPointerMoveHover(ev) {
   showHint(`Δ ${fmt(d.x)} · ${fmt(d.y)} · ${fmt(d.z)} mm  →  <b>${fmt(d.length())} mm</b>`);
 }
 
-window.addEventListener("keydown", (e) => { if (e.key === "Escape") setMode("orbit"); });
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Shift" && transformControls) transformControls.setRotationSnap(THREE.MathUtils.degToRad(5));  // hold Shift → snap rotation to 5°
+  if (e.key === "Escape") { setMode("orbit"); if (xformMode) setXformMode(false); return; }
+  // W/E switch the gizmo while transforming (mirrors the three.js example), unless typing
+  if (xformMode && !/^(INPUT|TEXTAREA)$/.test(document.activeElement && document.activeElement.tagName) && !(document.activeElement && document.activeElement.isContentEditable)) {
+    if (e.key === "w" || e.key === "W") setGizmoMode("translate");
+    else if (e.key === "e" || e.key === "E") setGizmoMode("rotate");
+  }
+});
+window.addEventListener("keyup", (e) => {
+  if (e.key === "Shift" && transformControls) transformControls.setRotationSnap(null);  // release → free rotation
+});
 
 /* ----------------------------------------------------------------------------
    Marker scaling: keep spheres a constant pixel size as the view changes
@@ -8111,24 +9814,24 @@ function updateSectionGeometry() {
   capMesh.position.copy(onPlane);
   capMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), sectionPlane.normal);
 
-  // read-out: distance from model centre along the axis, in mm — sign is flip-
-  // independent. Leave the field alone while the user is typing into it.
-  const rel = d - bn.dot(center);
+  // read-out: distance from the world origin (grid 0) along the axis, in mm. `d` is
+  // already the plane's signed offset from the origin along bn (origin·bn = 0), so the
+  // reading is origin-based, not bounding-box-based. Leave the field alone while typing.
+  const rel = d;
   const inp = $("secVal");
   if (document.activeElement !== inp) inp.value = fmt(rel);
 }
 
-// convert a typed mm offset (from model centre) into a slider position (0..1)
+// convert a typed mm offset (from the world origin / grid 0) into a slider position (0..1)
 function offsetToT(rel) {
   const box = getWorldBox();
   if (!box) return secT();
   const bn = sectionBaseNormal();
-  const center = box.getCenter(new THREE.Vector3());
   const { min, max } = projectRange(box, bn);
   const eps = (max - min) * 0.001 + 1e-4;
   const span = (max - min) - 2 * eps;
   if (span <= 0) return 0.5;
-  const d = rel + bn.dot(center);
+  const d = rel;   // origin-based: the plane sits at distance `rel` from the origin along bn
   return clamp01((d - (min + eps)) / span);
 }
 
@@ -8194,7 +9897,15 @@ function rebuildObjectsPanel() {
     eye.innerHTML = p.visible ? EYE : EYE_OFF;
     eye.addEventListener("click", (e) => { e.stopPropagation(); togglePartVisible(p.id); });
 
-    row.appendChild(sw); row.appendChild(nm); row.appendChild(eye);
+    row.appendChild(sw); row.appendChild(nm);
+    // reset-transform button: only when this part has been moved/rotated from its baseline
+    if (partMoved(p)) {
+      const rst = document.createElement("button"); rst.className = "mini reset"; rst.title = "Reset position & rotation";
+      rst.innerHTML = ICON_RESET;
+      rst.addEventListener("click", (e) => { e.stopPropagation(); resetPartTransform(p.id); });
+      row.appendChild(rst);
+    }
+    row.appendChild(eye);
     row.addEventListener("click", () => selectPart(p.id, true));
     list.appendChild(row);
   });
@@ -8302,7 +10013,19 @@ function serializeState() {
     v: 1,
     meta: Object.assign({}, state.meta),
     files: state.files.map((f) => ({ id: f.id, name: f.name, format: f.format, data: f.data })),
-    parts: state.parts.map((p) => ({ fileId: p.fileId, index: p.index, name: p.name, color: p.color, visible: p.visible })),
+    parts: state.parts.map((p) => {
+      const o = { fileId: p.fileId, index: p.index, name: p.name, color: p.color, visible: p.visible };
+      const E2 = XFORM_EPS * XFORM_EPS;
+      // baseline ("default") transform — stored as the offset from the pristine loader pose
+      if (p.loaderPos && p.basePos.distanceToSquared(p.loaderPos) > E2) o.dpos = p.basePos.clone().sub(p.loaderPos).toArray();
+      if (p.loaderQuat && p.baseQuat.angleTo(p.loaderQuat) > XFORM_EPS) o.dquat = p.baseQuat.toArray();
+      if (p.loaderScale && p.baseScale.distanceToSquared(p.loaderScale) > E2) o.dscale = p.baseScale.toArray();
+      // current transform — stored only when moved from the baseline (pos = delta from base)
+      if (p.basePos && p.mesh.position.distanceToSquared(p.basePos) > E2) o.pos = p.mesh.position.clone().sub(p.basePos).toArray();
+      if (p.baseQuat && p.mesh.quaternion.angleTo(p.baseQuat) > XFORM_EPS) o.quat = p.mesh.quaternion.toArray();
+      if (p.baseScale && p.mesh.scale.distanceToSquared(p.baseScale) > E2) o.scale = p.mesh.scale.toArray();
+      return o;
+    }),
     measurements: state.measurements.map((m) => ({ a: m.a.toArray(), b: m.b.toArray() })),
     annotations: state.annotations.map((a) => ({ p: a.p.toArray(), o: a.lp.clone().sub(a.p).toArray(), text: a.text })),
     section: { on: state.section.on, axis: state.section.axis, flip: state.section.flip, offsets: Object.assign({}, state.section.offsets) },
@@ -8384,6 +10107,7 @@ function loadFromState(data) {
 /* shared post-load wiring */
 function finishLoad() {
   rebuildObjectsPanel();
+  updateXformResetUI();   // surfaces reset controls if any saved part has a transform
   refreshInfoPanel();
   setProjection(state.meta.projection || "persp");
   setGrid(!!state.meta.gridOn);
@@ -8454,6 +10178,7 @@ function b64ToAb(b64) {
 
 const EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
 const EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+const ICON_RESET = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><polyline points="3 3 3 8 8 8"/></svg>';
 
 /* sync a set of "chip" elements to an active value */
 function syncChips(selector, dataAttr, value) {
@@ -8485,6 +10210,8 @@ function wireUI() {
   document.addEventListener("click", (e) => { if (!$("menu").contains(e.target) && e.target !== $("btnMenu")) closeMenu(); });
   $("miSave").addEventListener("click", saveFile);
   $("miEdit").addEventListener("click", () => { closeMenu(); setEditMode(true); openInfo(true); $("ifTitle").focus(); });
+  $("miSaveXform").addEventListener("click", saveTransformsAsDefault);
+  $("miRemoveXform").addEventListener("click", () => { closeMenu(); resetAllTransforms(); });
   $("miRemovePart").addEventListener("click", () => { closeMenu(); removeSelectedPart(); });
   $("miRemoveAll").addEventListener("click", () => { closeMenu(); removeAllParts(); });
   document.querySelectorAll("#oriChips .chip").forEach((c) => c.addEventListener("click", () => { applyUpAxis(c.dataset.axis); setView("iso"); }));
@@ -8531,6 +10258,20 @@ function wireUI() {
   $("btnIsolate").addEventListener("click", isolatePart);
   $("btnHideSel").addEventListener("click", hideSelected);
   $("btnShowAll").addEventListener("click", showAll);
+
+  // transform parts: toggle edit mode + floating Move/Rotate bar + reset-all + coord inputs
+  $("btnXform").addEventListener("click", () => setXformMode(!xformMode));
+  $("xfMove").addEventListener("click", () => setGizmoMode("translate"));
+  $("xfRotate").addEventListener("click", () => setGizmoMode("rotate"));
+  $("btnResetXform").addEventListener("click", resetAllTransforms);
+  const wireXf = (id, commit) => {
+    const inp = $(id);
+    inp.addEventListener("change", commit);
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); inp.blur(); } });
+  };
+  ["x", "y", "z"].forEach((axis) => wireXf("pos" + axis.toUpperCase(), () => commitPartCoord(axis)));
+  ["X", "Y", "Z"].forEach((ax) => wireXf("rot" + ax, commitPartRot));
+  wireXf("scaleU", commitPartScale);
 
   setupCollapsiblePanels();
 
@@ -8620,10 +10361,11 @@ function removeSelectedPart() {
   if (!selectedId) { toast("Select a part first"); return; }
   const i = state.parts.findIndex((p) => p.id === selectedId);
   if (i < 0) return;
+  detachGizmo();
   modelRoot.remove(state.parts[i].mesh);
   state.parts.splice(i, 1);
   selectedId = null;
-  rebuildObjectsPanel(); refreshInfoPanel();
+  updateXformResetUI(); refreshInfoPanel();
   if (state.section.on) buildSection();
   if (state.parts.length === 0) showOverlay("empty");
 }
@@ -8631,6 +10373,7 @@ function removeSelectedPart() {
 function removeAllParts() {
   if (state.parts.length === 0) return;
   if (!confirm("Remove all parts from the view?")) return;
+  detachGizmo();
   state.parts.forEach((p) => modelRoot.remove(p.mesh));
   state.parts.length = 0; state.files.length = 0; selectedId = null;
   clearMeasurements();
@@ -8639,7 +10382,7 @@ function removeAllParts() {
   // fresh model starts centred on every plane
   state.section.offsets = { x: 0.5, y: 0.5, z: 0.5 };
   $("secSlider").value = 500; $("secVal").value = "";
-  rebuildObjectsPanel(); refreshInfoPanel(); showOverlay("empty");
+  updateXformResetUI(); refreshInfoPanel(); showOverlay("empty");
 }
 
 /* ----------------------------------------------------------------------------

@@ -59,6 +59,9 @@ const uid = (p) => p + "_" + (Date.now().toString(36)) + "_" + (Math.random().to
    Three.js scene
 ---------------------------------------------------------------------------- */
 let renderer, labelRenderer, scene, perspCam, orthoCam, activeCam, controls;
+let transformControls;          // per-part move/rotate gizmo (Objects → Transform parts)
+let xformMode = false;          // is the transform-edit mode on?
+let gizmoMode = "translate";    // current gizmo: "translate" | "rotate"
 let modelRoot;      // holds loaded geometry; rotated so file "up" -> world +Y
 let markerRoot;     // child of modelRoot: measurements + annotations (file space)
 let gridHelper;
@@ -94,6 +97,20 @@ function initThree() {
   controls.dampingFactor = 0.08;
   controls.rotateSpeed = 0.9;
   controls.zoomToCursor = true;
+
+  // Per-part transform gizmo. Lives in the scene but stays detached/hidden until the
+  // Objects panel "Transform parts" toggle attaches it to a selected part's mesh.
+  transformControls = new THREE.TransformControls(activeCam, renderer.domElement);
+  transformControls.setMode("translate");   // switched at runtime by the floating Move/Rotate bar
+  transformControls.setSpace("world");
+  transformControls.setRotationSnap(null);   // free rotation; hold Shift to snap to 5° (see keydown/keyup)
+  transformControls.addEventListener("dragging-changed", (e) => { controls.enabled = !e.value; });
+  transformControls.addEventListener("mouseDown", onPartMoveStart);
+  transformControls.addEventListener("objectChange", onPartMoving);
+  transformControls.addEventListener("mouseUp", onPartMoveEnd);
+  transformControls.enabled = false;
+  transformControls.visible = false;
+  scene.add(transformControls);
 
   // Lighting: a hemisphere gradient (top brighter than bottom) gives every face a
   // readable tone — kept below clipping so even a white part shows falloff — plus a
@@ -340,6 +357,7 @@ function setProjection(mode) {
   to.up.copy(from.up);
   activeCam = to;
   controls.object = to;
+  if (transformControls) transformControls.camera = to;
   controls.update();
   $("btnProj").classList.toggle("active", mode === "ortho");
   $("btnProj").title = mode === "ortho" ? "Orthographic (click for perspective)" : "Perspective (click for orthographic)";
@@ -419,6 +437,30 @@ function registerObject(object3d, fileId, metaParts) {
     mesh.castShadow = true;       // each part shadows itself and the others
     mesh.receiveShadow = true;
     modelRoot.add(mesh);
+
+    // Two transform layers (see serializeState):
+    //  - loader*: the pristine geometry-space pose; the immutable anchor for saved deltas
+    //  - base*  : the baseline / reset-target ("Save transforms as default" shifts it here)
+    //  - mesh.* : the current pose (a move saved on top of the baseline)
+    part.loaderPos = mesh.position.clone();
+    part.loaderQuat = mesh.quaternion.clone();
+    part.loaderScale = mesh.scale.clone();
+
+    part.basePos = part.loaderPos.clone();
+    part.baseQuat = part.loaderQuat.clone();
+    part.baseScale = part.loaderScale.clone();
+    if (pm && pm.dpos) part.basePos.add(new THREE.Vector3().fromArray(pm.dpos));
+    if (pm && pm.dquat) part.baseQuat.fromArray(pm.dquat);
+    if (pm && pm.dscale) part.baseScale.fromArray(pm.dscale);
+
+    mesh.position.copy(part.basePos);
+    mesh.quaternion.copy(part.baseQuat);
+    mesh.scale.copy(part.baseScale);
+    if (pm && pm.pos) mesh.position.copy(part.basePos).add(new THREE.Vector3().fromArray(pm.pos));
+    if (pm && pm.quat) mesh.quaternion.fromArray(pm.quat);
+    if (pm && pm.scale) mesh.scale.fromArray(pm.scale);
+    mesh.updateMatrixWorld(true);
+
     state.parts.push(part);
   });
   return meshes.length;
@@ -468,6 +510,7 @@ function selectPart(id, fromList) {
     p.mesh.material.emissive.setHex(SELECT_EMIS);
     p.mesh.material.emissiveIntensity = 0.35;
   }
+  if (xformMode) { if (p) attachGizmo(id); else detachGizmo(); }
   refreshObjInfo();
   highlightRow(id);
 }
@@ -478,11 +521,193 @@ function deselect() {
     if (p) p.mesh.material.emissive.setHex(0x000000);
   }
   selectedId = null;
+  detachGizmo();
   refreshObjInfo();
   highlightRow(null);
 }
 
 function partById(id) { return state.parts.find((p) => p.id === id); }
+
+/* ----------------------------------------------------------------------------
+   Per-part transform (move / rotate gizmo)  —  Objects panel → "Transform parts"
+---------------------------------------------------------------------------- */
+// A part is "moved" when its mesh transform differs from the baseline captured at load.
+const XFORM_EPS = 1e-4;
+function partMoved(p) {
+  if (!p || !p.basePos) return false;
+  if (p.mesh.position.distanceToSquared(p.basePos) > XFORM_EPS * XFORM_EPS) return true;
+  if (p.mesh.scale.distanceToSquared(p.baseScale) > XFORM_EPS * XFORM_EPS) return true;
+  return p.mesh.quaternion.angleTo(p.baseQuat) > XFORM_EPS;
+}
+
+function attachGizmo(id) {
+  const p = partById(id);
+  if (!p) { detachGizmo(); return; }
+  transformControls.attach(p.mesh);
+  transformControls.setMode(gizmoMode);
+  transformControls.enabled = true;
+  transformControls.visible = true;
+  updatePartCoords();
+}
+function detachGizmo() {
+  if (!transformControls) return;
+  transformControls.detach();
+  transformControls.enabled = false;
+  transformControls.visible = false;
+  updatePartCoords();
+}
+
+function setXformMode(on) {
+  xformMode = on;
+  $("btnXform").classList.toggle("active", on);
+  document.body.classList.toggle("xediting", on);
+  $("xformBar").classList.toggle("show", on);
+  if (on) { const p = partById(selectedId); if (p) attachGizmo(selectedId); }
+  else { detachGizmo(); hideXformReadout(); }
+  updatePartCoords();
+}
+
+function setGizmoMode(m) {
+  gizmoMode = m;
+  if (transformControls) transformControls.setMode(m);
+  $("xfMove").classList.toggle("active", m === "translate");
+  $("xfRotate").classList.toggle("active", m === "rotate");
+}
+
+/* live read-out (distance while moving, angle while rotating) ---------------- */
+let dragStartPos = null, dragStartQuat = null;
+function showXformReadout(html) { const r = $("xformReadout"); r.innerHTML = html; r.classList.add("show"); }
+function hideXformReadout() { $("xformReadout").classList.remove("show"); }
+
+function onPartMoveStart() {
+  const o = transformControls.object;
+  if (!o) return;
+  dragStartPos = o.position.clone();
+  dragStartQuat = o.quaternion.clone();
+}
+// fires continuously while a handle is dragged
+function onPartMoving() {
+  const o = transformControls.object;
+  if (!o || !dragStartPos) return;
+  if (gizmoMode === "rotate") {
+    const deg = THREE.MathUtils.radToDeg(dragStartQuat.angleTo(o.quaternion));
+    showXformReadout('↻ <b>' + deg.toFixed(0) + '°</b>');
+  } else {
+    const d = o.position.clone().sub(dragStartPos);
+    showXformReadout('Δ ' + fmt(d.x) + ' · ' + fmt(d.y) + ' · ' + fmt(d.z) + ' mm · <b>' + fmt(d.length()) + ' mm</b>');
+  }
+  updatePartCoords();
+}
+
+// dragging a handle finished: keep dependent visuals in sync and surface the reset UI
+function onPartMoveEnd() {
+  hideXformReadout();
+  if (state.section.on) buildSection();
+  updateXformResetUI();
+  updatePartCoords();
+  refreshObjInfo();
+}
+
+function resetPartTransform(id) {
+  const p = partById(id);
+  if (!p) return;
+  p.mesh.position.copy(p.basePos);
+  p.mesh.quaternion.copy(p.baseQuat);
+  p.mesh.scale.copy(p.baseScale);
+  p.mesh.updateMatrixWorld(true);
+  if (state.section.on) buildSection();
+  updateXformResetUI();
+  updatePartCoords();
+  refreshObjInfo();
+}
+
+function resetAllTransforms() {
+  state.parts.forEach((p) => { p.mesh.position.copy(p.basePos); p.mesh.quaternion.copy(p.baseQuat); p.mesh.scale.copy(p.baseScale); p.mesh.updateMatrixWorld(true); });
+  if (state.section.on) buildSection();
+  updateXformResetUI();
+  updatePartCoords();
+  refreshObjInfo();
+}
+
+// bake the current poses into the baseline: Reset now returns here, and "Save file"
+// persists these as the default (no part is "moved" afterwards, so the reset UI hides)
+function saveTransformsAsDefault() {
+  closeMenu();
+  if (state.parts.length === 0) { toast("No parts loaded"); return; }
+  state.parts.forEach((p) => { p.basePos.copy(p.mesh.position); p.baseQuat.copy(p.mesh.quaternion); p.baseScale.copy(p.mesh.scale); });
+  updateXformResetUI();
+  updatePartCoords();
+  toast("Current transforms set as default");
+}
+
+// show the per-row + "Reset all" controls only when at least one part has been altered
+function updateXformResetUI() {
+  const any = state.parts.some(partMoved);
+  const btn = $("btnResetXform");
+  if (btn) btn.style.display = any ? "" : "none";
+  rebuildObjectsPanel();
+}
+
+// numeric fields for trimming, etc.; degrees with up to 1 dp, scale with up to 3 dp
+const fmtDeg = (d) => String(+(d).toFixed(1));
+const fmtScale = (s) => String(+(s).toFixed(3));
+const _euler = new THREE.Euler();
+
+// Position / rotation / scale fields for the selected part (visible only while transforming)
+function updatePartCoords() {
+  const box = $("partCoords");
+  if (!box) return;
+  const p = (xformMode && selectedId) ? partById(selectedId) : null;
+  if (!p) { box.style.display = "none"; return; }
+  box.style.display = "";
+  const m = p.mesh;
+  const af = document.activeElement;                       // don't clobber a field being typed into
+  const set = (id, val) => { const el = $(id); if (af !== el) el.value = val; };
+  set("posX", fmt(m.position.x)); set("posY", fmt(m.position.y)); set("posZ", fmt(m.position.z));
+  _euler.setFromQuaternion(m.quaternion, "XYZ");
+  set("rotX", fmtDeg(THREE.MathUtils.radToDeg(_euler.x)));
+  set("rotY", fmtDeg(THREE.MathUtils.radToDeg(_euler.y)));
+  set("rotZ", fmtDeg(THREE.MathUtils.radToDeg(_euler.z)));
+  set("scaleU", fmtScale(m.scale.x));
+}
+
+// commit a typed position coordinate
+function commitPartCoord(axis) {
+  if (!selectedId) return;
+  const p = partById(selectedId); if (!p) return;
+  const v = parseFloat($("pos" + axis.toUpperCase()).value);
+  if (isFinite(v)) { p.mesh.position[axis] = v; afterCoordEdit(p); }
+  updatePartCoords();
+}
+
+// commit typed rotation (Euler XYZ degrees, rebuilt from all three fields)
+function commitPartRot() {
+  if (!selectedId) return;
+  const p = partById(selectedId); if (!p) return;
+  const rx = parseFloat($("rotX").value), ry = parseFloat($("rotY").value), rz = parseFloat($("rotZ").value);
+  if (isFinite(rx) && isFinite(ry) && isFinite(rz)) {
+    _euler.set(THREE.MathUtils.degToRad(rx), THREE.MathUtils.degToRad(ry), THREE.MathUtils.degToRad(rz), "XYZ");
+    p.mesh.quaternion.setFromEuler(_euler);
+    afterCoordEdit(p);
+  }
+  updatePartCoords();
+}
+
+// commit typed uniform scale (overall, applied to all axes)
+function commitPartScale() {
+  if (!selectedId) return;
+  const p = partById(selectedId); if (!p) return;
+  const s = parseFloat($("scaleU").value);
+  if (isFinite(s) && s > 0) { p.mesh.scale.set(s, s, s); afterCoordEdit(p); }
+  updatePartCoords();
+}
+
+// shared follow-up after any typed transform edit
+function afterCoordEdit(p) {
+  p.mesh.updateMatrixWorld(true);
+  if (state.section.on) buildSection();
+  updateXformResetUI();
+}
 
 /* ----------------------------------------------------------------------------
    Pointer interaction (select / measure / annotate / remove-annot)
@@ -531,6 +756,8 @@ function onPointerDown(ev) {
 function onPointerUp(ev) {
   if (ev.button !== 0 || !downValid) return;
   downValid = false;
+  // a press on / drag of a gizmo handle is owned by TransformControls — never select/deselect
+  if (transformControls && (transformControls.dragging || transformControls.axis)) return;
   if (Math.hypot(ev.clientX - downX, ev.clientY - downY) > CLICK_SLOP) return; // was a drag → orbit
   handleClick(ev);
 }
@@ -570,7 +797,18 @@ function onPointerMoveHover(ev) {
   showHint(`Δ ${fmt(d.x)} · ${fmt(d.y)} · ${fmt(d.z)} mm  →  <b>${fmt(d.length())} mm</b>`);
 }
 
-window.addEventListener("keydown", (e) => { if (e.key === "Escape") setMode("orbit"); });
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Shift" && transformControls) transformControls.setRotationSnap(THREE.MathUtils.degToRad(5));  // hold Shift → snap rotation to 5°
+  if (e.key === "Escape") { setMode("orbit"); if (xformMode) setXformMode(false); return; }
+  // W/E switch the gizmo while transforming (mirrors the three.js example), unless typing
+  if (xformMode && !/^(INPUT|TEXTAREA)$/.test(document.activeElement && document.activeElement.tagName) && !(document.activeElement && document.activeElement.isContentEditable)) {
+    if (e.key === "w" || e.key === "W") setGizmoMode("translate");
+    else if (e.key === "e" || e.key === "E") setGizmoMode("rotate");
+  }
+});
+window.addEventListener("keyup", (e) => {
+  if (e.key === "Shift" && transformControls) transformControls.setRotationSnap(null);  // release → free rotation
+});
 
 /* ----------------------------------------------------------------------------
    Marker scaling: keep spheres a constant pixel size as the view changes
@@ -976,24 +1214,24 @@ function updateSectionGeometry() {
   capMesh.position.copy(onPlane);
   capMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), sectionPlane.normal);
 
-  // read-out: distance from model centre along the axis, in mm — sign is flip-
-  // independent. Leave the field alone while the user is typing into it.
-  const rel = d - bn.dot(center);
+  // read-out: distance from the world origin (grid 0) along the axis, in mm. `d` is
+  // already the plane's signed offset from the origin along bn (origin·bn = 0), so the
+  // reading is origin-based, not bounding-box-based. Leave the field alone while typing.
+  const rel = d;
   const inp = $("secVal");
   if (document.activeElement !== inp) inp.value = fmt(rel);
 }
 
-// convert a typed mm offset (from model centre) into a slider position (0..1)
+// convert a typed mm offset (from the world origin / grid 0) into a slider position (0..1)
 function offsetToT(rel) {
   const box = getWorldBox();
   if (!box) return secT();
   const bn = sectionBaseNormal();
-  const center = box.getCenter(new THREE.Vector3());
   const { min, max } = projectRange(box, bn);
   const eps = (max - min) * 0.001 + 1e-4;
   const span = (max - min) - 2 * eps;
   if (span <= 0) return 0.5;
-  const d = rel + bn.dot(center);
+  const d = rel;   // origin-based: the plane sits at distance `rel` from the origin along bn
   return clamp01((d - (min + eps)) / span);
 }
 
@@ -1059,7 +1297,15 @@ function rebuildObjectsPanel() {
     eye.innerHTML = p.visible ? EYE : EYE_OFF;
     eye.addEventListener("click", (e) => { e.stopPropagation(); togglePartVisible(p.id); });
 
-    row.appendChild(sw); row.appendChild(nm); row.appendChild(eye);
+    row.appendChild(sw); row.appendChild(nm);
+    // reset-transform button: only when this part has been moved/rotated from its baseline
+    if (partMoved(p)) {
+      const rst = document.createElement("button"); rst.className = "mini reset"; rst.title = "Reset position & rotation";
+      rst.innerHTML = ICON_RESET;
+      rst.addEventListener("click", (e) => { e.stopPropagation(); resetPartTransform(p.id); });
+      row.appendChild(rst);
+    }
+    row.appendChild(eye);
     row.addEventListener("click", () => selectPart(p.id, true));
     list.appendChild(row);
   });
@@ -1167,7 +1413,19 @@ function serializeState() {
     v: 1,
     meta: Object.assign({}, state.meta),
     files: state.files.map((f) => ({ id: f.id, name: f.name, format: f.format, data: f.data })),
-    parts: state.parts.map((p) => ({ fileId: p.fileId, index: p.index, name: p.name, color: p.color, visible: p.visible })),
+    parts: state.parts.map((p) => {
+      const o = { fileId: p.fileId, index: p.index, name: p.name, color: p.color, visible: p.visible };
+      const E2 = XFORM_EPS * XFORM_EPS;
+      // baseline ("default") transform — stored as the offset from the pristine loader pose
+      if (p.loaderPos && p.basePos.distanceToSquared(p.loaderPos) > E2) o.dpos = p.basePos.clone().sub(p.loaderPos).toArray();
+      if (p.loaderQuat && p.baseQuat.angleTo(p.loaderQuat) > XFORM_EPS) o.dquat = p.baseQuat.toArray();
+      if (p.loaderScale && p.baseScale.distanceToSquared(p.loaderScale) > E2) o.dscale = p.baseScale.toArray();
+      // current transform — stored only when moved from the baseline (pos = delta from base)
+      if (p.basePos && p.mesh.position.distanceToSquared(p.basePos) > E2) o.pos = p.mesh.position.clone().sub(p.basePos).toArray();
+      if (p.baseQuat && p.mesh.quaternion.angleTo(p.baseQuat) > XFORM_EPS) o.quat = p.mesh.quaternion.toArray();
+      if (p.baseScale && p.mesh.scale.distanceToSquared(p.baseScale) > E2) o.scale = p.mesh.scale.toArray();
+      return o;
+    }),
     measurements: state.measurements.map((m) => ({ a: m.a.toArray(), b: m.b.toArray() })),
     annotations: state.annotations.map((a) => ({ p: a.p.toArray(), o: a.lp.clone().sub(a.p).toArray(), text: a.text })),
     section: { on: state.section.on, axis: state.section.axis, flip: state.section.flip, offsets: Object.assign({}, state.section.offsets) },
@@ -1249,6 +1507,7 @@ function loadFromState(data) {
 /* shared post-load wiring */
 function finishLoad() {
   rebuildObjectsPanel();
+  updateXformResetUI();   // surfaces reset controls if any saved part has a transform
   refreshInfoPanel();
   setProjection(state.meta.projection || "persp");
   setGrid(!!state.meta.gridOn);
@@ -1319,6 +1578,7 @@ function b64ToAb(b64) {
 
 const EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
 const EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+const ICON_RESET = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><polyline points="3 3 3 8 8 8"/></svg>';
 
 /* sync a set of "chip" elements to an active value */
 function syncChips(selector, dataAttr, value) {
@@ -1350,6 +1610,8 @@ function wireUI() {
   document.addEventListener("click", (e) => { if (!$("menu").contains(e.target) && e.target !== $("btnMenu")) closeMenu(); });
   $("miSave").addEventListener("click", saveFile);
   $("miEdit").addEventListener("click", () => { closeMenu(); setEditMode(true); openInfo(true); $("ifTitle").focus(); });
+  $("miSaveXform").addEventListener("click", saveTransformsAsDefault);
+  $("miRemoveXform").addEventListener("click", () => { closeMenu(); resetAllTransforms(); });
   $("miRemovePart").addEventListener("click", () => { closeMenu(); removeSelectedPart(); });
   $("miRemoveAll").addEventListener("click", () => { closeMenu(); removeAllParts(); });
   document.querySelectorAll("#oriChips .chip").forEach((c) => c.addEventListener("click", () => { applyUpAxis(c.dataset.axis); setView("iso"); }));
@@ -1396,6 +1658,20 @@ function wireUI() {
   $("btnIsolate").addEventListener("click", isolatePart);
   $("btnHideSel").addEventListener("click", hideSelected);
   $("btnShowAll").addEventListener("click", showAll);
+
+  // transform parts: toggle edit mode + floating Move/Rotate bar + reset-all + coord inputs
+  $("btnXform").addEventListener("click", () => setXformMode(!xformMode));
+  $("xfMove").addEventListener("click", () => setGizmoMode("translate"));
+  $("xfRotate").addEventListener("click", () => setGizmoMode("rotate"));
+  $("btnResetXform").addEventListener("click", resetAllTransforms);
+  const wireXf = (id, commit) => {
+    const inp = $(id);
+    inp.addEventListener("change", commit);
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); inp.blur(); } });
+  };
+  ["x", "y", "z"].forEach((axis) => wireXf("pos" + axis.toUpperCase(), () => commitPartCoord(axis)));
+  ["X", "Y", "Z"].forEach((ax) => wireXf("rot" + ax, commitPartRot));
+  wireXf("scaleU", commitPartScale);
 
   setupCollapsiblePanels();
 
@@ -1485,10 +1761,11 @@ function removeSelectedPart() {
   if (!selectedId) { toast("Select a part first"); return; }
   const i = state.parts.findIndex((p) => p.id === selectedId);
   if (i < 0) return;
+  detachGizmo();
   modelRoot.remove(state.parts[i].mesh);
   state.parts.splice(i, 1);
   selectedId = null;
-  rebuildObjectsPanel(); refreshInfoPanel();
+  updateXformResetUI(); refreshInfoPanel();
   if (state.section.on) buildSection();
   if (state.parts.length === 0) showOverlay("empty");
 }
@@ -1496,6 +1773,7 @@ function removeSelectedPart() {
 function removeAllParts() {
   if (state.parts.length === 0) return;
   if (!confirm("Remove all parts from the view?")) return;
+  detachGizmo();
   state.parts.forEach((p) => modelRoot.remove(p.mesh));
   state.parts.length = 0; state.files.length = 0; selectedId = null;
   clearMeasurements();
@@ -1504,7 +1782,7 @@ function removeAllParts() {
   // fresh model starts centred on every plane
   state.section.offsets = { x: 0.5, y: 0.5, z: 0.5 };
   $("secSlider").value = 500; $("secVal").value = "";
-  rebuildObjectsPanel(); refreshInfoPanel(); showOverlay("empty");
+  updateXformResetUI(); refreshInfoPanel(); showOverlay("empty");
 }
 
 /* ----------------------------------------------------------------------------

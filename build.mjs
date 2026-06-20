@@ -29,6 +29,7 @@ html = html.replace(
 const scripts = [
   "vendor/three.min.js",
   "vendor/OrbitControls.js",
+  "vendor/TransformControls.js",
   "vendor/OBJLoader.js",
   "vendor/STLLoader.js",
   "vendor/GLTFLoader.js",
