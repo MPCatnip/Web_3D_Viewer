@@ -529,6 +529,52 @@ function deselect() {
 function partById(id) { return state.parts.find((p) => p.id === id); }
 
 /* ----------------------------------------------------------------------------
+   Marker ↔ part binding — lets measurements / annotations ride along when the
+   part they were placed on is moved, rotated or scaled. A bound point is stored
+   in the part mesh's local space; its marker-space position is re-derived on
+   demand from the part's live pose.
+---------------------------------------------------------------------------- */
+// runtime part ids are regenerated on reload, so persist a stable file+index ref
+function partRef(partId) { const p = partById(partId); return p ? { fileId: p.fileId, index: p.index } : null; }
+function partIdFromRef(ref) {
+  if (!ref) return null;
+  const p = state.parts.find((x) => x.fileId === ref.fileId && x.index === ref.index);
+  return p ? p.id : null;
+}
+// part-local point -> current markerRoot-local point (follows the live mesh pose)
+function markerLocalFromPart(partId, partLocal) {
+  const p = partById(partId);
+  if (!p) return null;
+  p.mesh.updateMatrixWorld();
+  return markerRoot.worldToLocal(p.mesh.localToWorld(partLocal.clone()));
+}
+// Anchor a free marker-space point to the nearest part surface. Used for points
+// from older saved files that predate binding; returns null when no part is close
+// enough for the point to plausibly belong to it (so free-floating points stay put).
+const _nbWorld = new THREE.Vector3(), _nbClamp = new THREE.Vector3();
+function nearestPartBinding(localVec) {
+  markerRoot.localToWorld(_nbWorld.copy(localVec));
+  let best = null, bestD = Infinity;
+  state.parts.forEach((p) => {
+    const g = p.mesh.geometry; if (!g.boundingBox) g.computeBoundingBox();
+    p.mesh.updateMatrixWorld();
+    const b = g.boundingBox.clone().applyMatrix4(p.mesh.matrixWorld);
+    const d = b.clampPoint(_nbWorld, _nbClamp).distanceTo(_nbWorld);
+    if (d < bestD) { bestD = d; best = p; }
+  });
+  if (!best) return null;
+  const box = getWorldBox();
+  const diag = box ? box.getSize(new THREE.Vector3()).length() : 1;
+  if (bestD > diag * 0.02) return null;
+  return { partId: best.id, partLocal: best.mesh.worldToLocal(_nbWorld.clone()) };
+}
+// re-derive every bound marker's geometry from its part's current pose
+function refreshMarkers() {
+  state.measurements.forEach(updateMeasurementGeometry);
+  state.annotations.forEach(refreshAnnotation);
+}
+
+/* ----------------------------------------------------------------------------
    Per-part transform (move / rotate gizmo)  —  Objects panel → "Transform parts"
 ---------------------------------------------------------------------------- */
 // A part is "moved" when its mesh transform differs from the baseline captured at load.
@@ -597,6 +643,7 @@ function onPartMoving() {
     showXformReadout('Δ ' + fmt(d.x) + ' · ' + fmt(d.y) + ' · ' + fmt(d.z) + ' mm · <b>' + fmt(d.length()) + ' mm</b>');
   }
   updatePartCoords();
+  refreshMarkers();   // measurements/annotations on this part track the drag
 }
 
 // dragging a handle finished: keep dependent visuals in sync and surface the reset UI
@@ -619,6 +666,7 @@ function resetPartTransform(id) {
   updateXformResetUI();
   updatePartCoords();
   refreshObjInfo();
+  refreshMarkers();
 }
 
 function resetAllTransforms() {
@@ -627,6 +675,7 @@ function resetAllTransforms() {
   updateXformResetUI();
   updatePartCoords();
   refreshObjInfo();
+  refreshMarkers();
 }
 
 // bake the current poses into the baseline: Reset now returns here, and "Save file"
@@ -707,6 +756,7 @@ function afterCoordEdit(p) {
   p.mesh.updateMatrixWorld(true);
   if (state.section.on) buildSection();
   updateXformResetUI();
+  refreshMarkers();
 }
 
 /* ----------------------------------------------------------------------------
@@ -720,14 +770,17 @@ let measurePending = null;  // first picked local point
 function setMode(m) {
   mode = m;
   $("btnMeasure").classList.toggle("active", m === "measure");
+  $("btnRemoveMeas").classList.toggle("active", m === "removeMeas");
   $("btnAnnot").classList.toggle("active", m === "annotate");
   $("btnRemoveAnnot").classList.toggle("active", m === "removeAnnot");
   // Rotation stays enabled in every mode. A drag orbits the model; a click (no drag,
   // see onPointerUp) places a measurement/annotation point or changes selection. This
   // lets you place point A, rotate to the far side, then place point B.
-  measurePending = null;
+  measurePending = null; clearTempDot();
   document.querySelectorAll(".label.annot").forEach((el) => el.classList.toggle("removable", m === "removeAnnot"));
+  document.querySelectorAll(".label.measure").forEach((el) => el.classList.toggle("removable", m === "removeMeas"));
   if (m === "measure") showHint('Click two points on the model to measure. <kbd>Esc</kbd> to stop.');
+  else if (m === "removeMeas") showHint('Click a measurement to remove it. <kbd>Esc</kbd> to stop.');
   else if (m === "annotate") showHint('Click a point to add a note, then type. Drag a label to reposition. <kbd>Esc</kbd> to stop.');
   else if (m === "removeAnnot") showHint('Click an annotation to remove it. <kbd>Esc</kbd> to stop.');
   else hideHint();
@@ -773,13 +826,21 @@ function handleClick(ev) {
     const hit = pickPoint(ev);
     if (!hit) return;
     const local = markerRoot.worldToLocal(hit.point.clone());
-    if (!measurePending) { measurePending = local; spawnTempDot(local); }
-    else { addMeasurement(measurePending, local); measurePending = null; clearTempDot(); }
+    const partId = hit.object.userData.partId;
+    const partLocal = hit.object.worldToLocal(hit.point.clone());   // bind this end to the part it sits on
+    if (!measurePending) { measurePending = { local, partId, partLocal }; spawnTempDot(local); }
+    else {
+      addMeasurement(measurePending.local, local, {
+        aPart: measurePending.partId, aLocal: measurePending.partLocal,
+        bPart: partId, bLocal: partLocal,
+      });
+      measurePending = null; clearTempDot();
+    }
   } else if (mode === "annotate") {
     const hit = pickPoint(ev);
     if (!hit) return;
     const local = markerRoot.worldToLocal(hit.point.clone());
-    const a = addAnnotation(local, "", { isNew: true });
+    const a = addAnnotation(local, "", { isNew: true, part: hit.object.userData.partId, pLocal: hit.object.worldToLocal(hit.point.clone()) });
     // the CSS2D label only attaches to the DOM on the next render frame; wait for it
     // before focusing, or focus()/selection would run on a detached node.
     requestAnimationFrame(() => beginEditAnnotation(a));  // type straight into the floating label
@@ -793,7 +854,7 @@ function onPointerMoveHover(ev) {
   const hit = pickPoint(ev);
   if (!hit) { hideHint(); return; }
   const local = markerRoot.worldToLocal(hit.point.clone());
-  const d = local.clone().sub(measurePending);
+  const d = local.clone().sub(measurePending.local);
   showHint(`Δ ${fmt(d.x)} · ${fmt(d.y)} · ${fmt(d.z)} mm  →  <b>${fmt(d.length())} mm</b>`);
 }
 
@@ -867,48 +928,83 @@ const sphereGeo = new THREE.SphereGeometry(1, 16, 12);
 let tempDot = null;
 function spawnTempDot(local) {
   clearTempDot();
-  tempDot = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: 0x385e9d }));
+  tempDot = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: MEAS_COLOR }));
   tempDot.position.copy(local);
   markerRoot.add(tempDot);
 }
 function clearTempDot() { if (tempDot) { markerRoot.remove(tempDot); tempDot = null; } }
 
-const MEAS_COLOR = 0x385e9d;
+const MEAS_COLOR = 0x389d86;   // matches the UI accent (--accent)
 const XRAY_OPACITY = 0.3;
-function addMeasurement(a, b) {
+function addMeasurement(a, b, bind) {
+  bind = bind || {};
   const id = uid("m");
   const group = new THREE.Group();
   const lineGeo = new THREE.BufferGeometry().setFromPoints([a, b]);
 
   // Solid pass (depth-tested): the dots + line, hidden where the model is in front.
   const matDot = new THREE.MeshBasicMaterial({ color: MEAS_COLOR });
-  const da = new THREE.Mesh(sphereGeo, matDot); da.position.copy(a);
-  const db = new THREE.Mesh(sphereGeo, matDot); db.position.copy(b);
+  const da = new THREE.Mesh(sphereGeo, matDot);
+  const db = new THREE.Mesh(sphereGeo, matDot);
   const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: MEAS_COLOR }));
 
   // X-ray pass (no depth test): the same dots + line drawn through the model, faded.
   // Same colour, so where the solid pass is visible the overlay blends in invisibly;
   // only the part behind the model shows up — and only at the reduced opacity.
   const matDotX = new THREE.MeshBasicMaterial({ color: MEAS_COLOR, transparent: true, opacity: XRAY_OPACITY, depthTest: false, depthWrite: false });
-  const daX = new THREE.Mesh(sphereGeo, matDotX); daX.position.copy(a); daX.renderOrder = 4;
-  const dbX = new THREE.Mesh(sphereGeo, matDotX); dbX.position.copy(b); dbX.renderOrder = 4;
+  const daX = new THREE.Mesh(sphereGeo, matDotX); daX.renderOrder = 4;
+  const dbX = new THREE.Mesh(sphereGeo, matDotX); dbX.renderOrder = 4;
   const lineX = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: MEAS_COLOR, transparent: true, opacity: XRAY_OPACITY, depthTest: false, depthWrite: false }));
   lineX.renderOrder = 4;
 
   group.add(da, db, line, daX, dbX, lineX);
   markerRoot.add(group);
 
-  const d = b.clone().sub(a);
   const el = document.createElement("div");
   el.className = "label measure";
-  el.innerHTML = `${fmt(d.length())} mm<span class="comp">Δ ${fmt(d.x)} · ${fmt(d.y)} · ${fmt(d.z)}</span>`;
   const label = new THREE.CSS2DObject(el);
-  label.position.copy(a.clone().add(b).multiplyScalar(0.5));
   group.add(label);
 
-  const m = { id, a: a.clone(), b: b.clone(), group, label, el };
+  const m = {
+    id, a: a.clone(), b: b.clone(), group, label, el, da, db, daX, dbX, lineGeo,
+    aPart: bind.aPart || null, aLocal: bind.aLocal ? bind.aLocal.clone() : null,
+    bPart: bind.bPart || null, bLocal: bind.bLocal ? bind.bLocal.clone() : null,
+  };
+  // older saved files carry no binding — anchor each end to a nearby part if there is one
+  if (!m.aPart) { const nb = nearestPartBinding(m.a); if (nb) { m.aPart = nb.partId; m.aLocal = nb.partLocal; } }
+  if (!m.bPart) { const nb = nearestPartBinding(m.b); if (nb) { m.bPart = nb.partId; m.bLocal = nb.partLocal; } }
+
+  el.addEventListener("click", () => { if (mode === "removeMeas") removeMeasurement(id); });
+  el.classList.toggle("removable", mode === "removeMeas");
+
   state.measurements.push(m);
+  updateMeasurementGeometry(m);
   applyMeasDisplay();
+  return m;
+}
+
+// (re)build a measurement's dots, line and label from its endpoints — re-deriving
+// any bound endpoint from its part first, so the measurement follows a moved part.
+function updateMeasurementGeometry(m) {
+  if (m.aPart && m.aLocal) { const v = markerLocalFromPart(m.aPart, m.aLocal); if (v) m.a.copy(v); }
+  if (m.bPart && m.bLocal) { const v = markerLocalFromPart(m.bPart, m.bLocal); if (v) m.b.copy(v); }
+  m.da.position.copy(m.a); m.daX.position.copy(m.a);
+  m.db.position.copy(m.b); m.dbX.position.copy(m.b);
+  m.lineGeo.setFromPoints([m.a, m.b]);
+  m.lineGeo.computeBoundingSphere();   // keep the line from being frustum-culled after a move
+  const d = m.b.clone().sub(m.a);
+  m.el.innerHTML = `${fmt(d.length())} mm<span class="comp">Δ ${fmt(d.x)} · ${fmt(d.y)} · ${fmt(d.z)}</span>`;
+  m.label.position.copy(m.a.clone().add(m.b).multiplyScalar(0.5));
+}
+
+function removeMeasurement(id) {
+  const i = state.measurements.findIndex((m) => m.id === id);
+  if (i < 0) return;
+  const m = state.measurements[i];
+  markerRoot.remove(m.group);
+  if (m.el && m.el.parentNode) m.el.parentNode.removeChild(m.el);   // CSS2D node isn't auto-cleaned
+  if (m.lineGeo) m.lineGeo.dispose();
+  state.measurements.splice(i, 1);
 }
 
 function clearMeasurements() {
@@ -979,7 +1075,13 @@ function addAnnotation(local, text, opts) {
 
   markerRoot.add(group);
 
-  const a = { id, p: local.clone(), lp: lp.clone(), text, group, marker, line, lineX, geo, obj, el, txt, _editing: false, _isNew: !!opts.isNew };
+  const a = {
+    id, p: local.clone(), lp: lp.clone(), text, group, marker, line, lineX, geo, obj, el, txt,
+    _editing: false, _isNew: !!opts.isNew,
+    part: opts.part || null, pLocal: opts.pLocal ? opts.pLocal.clone() : null,
+  };
+  // older saved files carry no binding — anchor to a nearby part if there is one
+  if (!a.part) { const nb = nearestPartBinding(a.p); if (nb) { a.part = nb.partId; a.pLocal = nb.partLocal; } }
 
   el.addEventListener("click", () => { if (mode === "removeAnnot") removeAnnotation(id); });
   el.addEventListener("dblclick", (e) => { if (mode === "removeAnnot") return; e.preventDefault(); beginEditAnnotation(a); });
@@ -1000,6 +1102,19 @@ function updateAnnotGeometry(a) {
   a.geo.computeBoundingSphere();   // keep the line from being frustum-culled after a move
 }
 
+// re-derive a bound annotation's anchor from its part, dragging the floating label
+// along by the same delta so the callout keeps its shape as the part moves.
+function refreshAnnotation(a) {
+  if (!a.part || !a.pLocal) return;
+  const v = markerLocalFromPart(a.part, a.pLocal);
+  if (!v) return;
+  const delta = v.clone().sub(a.p);
+  if (delta.lengthSq() === 0) return;
+  a.p.copy(v);
+  a.lp.add(delta);
+  updateAnnotGeometry(a);
+}
+
 function removeAnnotation(id) {
   const i = state.annotations.findIndex((a) => a.id === id);
   if (i < 0) return;
@@ -1014,6 +1129,10 @@ function applyAnnotDisplay() {
   // group.visible hides the marker + leader (WebGL respects ancestor visibility), but the
   // CSS2D label only checks its own .visible — so toggle the label object explicitly too.
   state.annotations.forEach((a) => { a.group.visible = annotDisplay; a.obj.visible = annotDisplay; });
+}
+
+function clearAnnotations() {
+  state.annotations.slice().forEach((a) => removeAnnotation(a.id));
 }
 
 /* ---- drag the label to reposition the callout ---- */
@@ -1290,8 +1409,16 @@ function rebuildObjectsPanel() {
     sw.appendChild(ci);
 
     const nm = document.createElement("div"); nm.className = "oname"; nm.textContent = p.name;
-    nm.title = p.name;
-    nm.addEventListener("dblclick", () => { if (editMode) beginRenamePart(nm, p.id); });
+    nm.title = editMode ? "Click to rename" : p.name;
+    // In edit mode a part name looks like a field (see CSS) and renames on a single
+    // click; stop the click bubbling so it edits the name instead of selecting the row.
+    const startRename = (e) => {
+      if (!editMode) return;
+      e.stopPropagation();
+      if (nm.getAttribute("contenteditable") !== "true") beginRenamePart(nm, p.id);
+    };
+    nm.addEventListener("click", startRename);
+    nm.addEventListener("dblclick", startRename);
 
     const eye = document.createElement("button"); eye.className = "mini"; eye.title = "Toggle visibility";
     eye.innerHTML = p.visible ? EYE : EYE_OFF;
@@ -1397,6 +1524,7 @@ function refreshInfoPanel() {
   $("confNotice").textContent = conf;
   const confEl = document.querySelector(".confidential");
   if (confEl) confEl.style.display = conf ? "" : "none";   // hide the badge when unbranded
+  updateConfidentialMenu();
   const box = getLocalBox();
   if (box) {
     const s = box.getSize(new THREE.Vector3());
@@ -1426,8 +1554,17 @@ function serializeState() {
       if (p.baseScale && p.mesh.scale.distanceToSquared(p.baseScale) > E2) o.scale = p.mesh.scale.toArray();
       return o;
     }),
-    measurements: state.measurements.map((m) => ({ a: m.a.toArray(), b: m.b.toArray() })),
-    annotations: state.annotations.map((a) => ({ p: a.p.toArray(), o: a.lp.clone().sub(a.p).toArray(), text: a.text })),
+    measurements: state.measurements.map((m) => {
+      const o = { a: m.a.toArray(), b: m.b.toArray() };
+      const ra = partRef(m.aPart); if (ra && m.aLocal) { o.aRef = ra; o.aLocal = m.aLocal.toArray(); }
+      const rb = partRef(m.bPart); if (rb && m.bLocal) { o.bRef = rb; o.bLocal = m.bLocal.toArray(); }
+      return o;
+    }),
+    annotations: state.annotations.map((a) => {
+      const o = { p: a.p.toArray(), o: a.lp.clone().sub(a.p).toArray(), text: a.text };
+      const r = partRef(a.part); if (r && a.pLocal) { o.ref = r; o.pLocal = a.pLocal.toArray(); }
+      return o;
+    }),
     section: { on: state.section.on, axis: state.section.axis, flip: state.section.flip, offsets: Object.assign({}, state.section.offsets) },
   };
 }
@@ -1491,11 +1628,18 @@ function loadFromState(data) {
   });
 
   Promise.all(tasks).then(() => {
-    (data.measurements || []).forEach((m) => addMeasurement(new THREE.Vector3().fromArray(m.a), new THREE.Vector3().fromArray(m.b)));
+    (data.measurements || []).forEach((m) => {
+      const bind = {};
+      if (m.aRef && m.aLocal) { bind.aPart = partIdFromRef(m.aRef); bind.aLocal = new THREE.Vector3().fromArray(m.aLocal); }
+      if (m.bRef && m.bLocal) { bind.bPart = partIdFromRef(m.bRef); bind.bLocal = new THREE.Vector3().fromArray(m.bLocal); }
+      addMeasurement(new THREE.Vector3().fromArray(m.a), new THREE.Vector3().fromArray(m.b), bind);
+    });
     (data.annotations || []).forEach((a) => {
       const p = new THREE.Vector3().fromArray(a.p);
       const lp = a.o ? p.clone().add(new THREE.Vector3().fromArray(a.o)) : null;
-      addAnnotation(p, a.text || "", lp ? { lp } : {});
+      const opts = lp ? { lp } : {};
+      if (a.ref && a.pLocal) { opts.part = partIdFromRef(a.ref); opts.pLocal = new THREE.Vector3().fromArray(a.pLocal); }
+      addAnnotation(p, a.text || "", opts);
     });
     finishLoad();
     $("secFlip").classList.toggle("active", state.section.flip);
@@ -1610,6 +1754,7 @@ function wireUI() {
   document.addEventListener("click", (e) => { if (!$("menu").contains(e.target) && e.target !== $("btnMenu")) closeMenu(); });
   $("miSave").addEventListener("click", saveFile);
   $("miEdit").addEventListener("click", () => { closeMenu(); setEditMode(true); openInfo(true); $("ifTitle").focus(); });
+  $("miConfidential").addEventListener("click", addConfidentialNotice);
   $("miSaveXform").addEventListener("click", saveTransformsAsDefault);
   $("miRemoveXform").addEventListener("click", () => { closeMenu(); resetAllTransforms(); });
   $("miRemovePart").addEventListener("click", () => { closeMenu(); removeSelectedPart(); });
@@ -1624,6 +1769,7 @@ function wireUI() {
 
   // tools — measure
   $("btnMeasure").addEventListener("click", () => setMode(mode === "measure" ? "orbit" : "measure"));
+  $("btnRemoveMeas").addEventListener("click", () => setMode(mode === "removeMeas" ? "orbit" : "removeMeas"));
   $("btnClearMeas").addEventListener("click", clearMeasurements);
   toggleRow("meas", () => { measDisplay = !measDisplay; $("swMeasDisp").classList.toggle("on", measDisplay); applyMeasDisplay(); });
 
@@ -1652,6 +1798,7 @@ function wireUI() {
   // tools — annotation
   $("btnAnnot").addEventListener("click", () => setMode(mode === "annotate" ? "orbit" : "annotate"));
   $("btnRemoveAnnot").addEventListener("click", () => setMode(mode === "removeAnnot" ? "orbit" : "removeAnnot"));
+  $("btnClearAnnot").addEventListener("click", clearAnnotations);
   toggleRow("annot", () => { annotDisplay = !annotDisplay; $("swAnnotDisp").classList.toggle("on", annotDisplay); applyAnnotDisplay(); });
 
   // objects
@@ -1663,6 +1810,7 @@ function wireUI() {
   $("btnXform").addEventListener("click", () => setXformMode(!xformMode));
   $("xfMove").addEventListener("click", () => setGizmoMode("translate"));
   $("xfRotate").addEventListener("click", () => setGizmoMode("rotate"));
+  $("xfClose").addEventListener("click", () => setXformMode(false));
   $("btnResetXform").addEventListener("click", resetAllTransforms);
   const wireXf = (id, commit) => {
     const inp = $(id);
@@ -1716,6 +1864,7 @@ function setEditMode(on) {
   $("ifDesc").readOnly = !on;
   $("miEdit").classList.toggle("active-item", on);
   $("modelName").title = on ? "Click to rename" : "";
+  rebuildObjectsPanel();   // refresh per-row rename affordance / tooltips
 }
 
 function commitEdit() {                 // keep the live values, leave edit mode
@@ -1735,6 +1884,38 @@ function discardEdit() {                 // revert to the snapshot, leave edit m
   editSnapshot = null;
   setEditMode(false);
   refreshInfoPanel();
+}
+
+/* Confidential notice — add via the menu. Once set it is PERMANENT: it can be
+   neither changed nor removed (and it's embedded on Save). */
+function addConfidentialNotice() {
+  closeMenu();
+  if (state.meta.confidential && state.meta.confidential.trim()) {
+    toast("Confidential notice is locked — it can't be changed or removed");
+    return;
+  }
+  const txt = prompt("Confidential notice (permanent once added — can't be changed or removed):",
+                     "Confidential — not for distribution");
+  if (txt == null) return;                       // cancelled
+  const v = txt.trim();
+  if (!v) { toast("Confidential notice can't be empty"); return; }
+  state.meta.confidential = v;
+  refreshInfoPanel();                            // reveals + updates the badge
+  toast("Confidential notice added");
+}
+
+// reflect whether a notice exists in the menu item (and make clear it's locked)
+function updateConfidentialMenu() {
+  const mi = $("miConfidential");
+  if (!mi) return;
+  const has = !!(state.meta.confidential && state.meta.confidential.trim());
+  mi.classList.toggle("active-item", has);
+  mi.classList.toggle("locked", has);
+  const lbl = mi.querySelector(".label"), desc = mi.querySelector(".desc");
+  if (lbl && lbl.lastChild) lbl.lastChild.textContent = has ? "Confidential notice (locked)" : "Add confidential notice";
+  if (desc) desc.textContent = has
+    ? "This model is marked confidential. The notice can't be changed or removed."
+    : "Mark this model as confidential. Once added, it can't be changed or removed.";
 }
 
 let infoHideTimer = null;   // pending hover-out close
