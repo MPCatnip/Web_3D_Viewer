@@ -2,10 +2,12 @@
    "Save file" produces. Output: tools/test_state.json (feed to build.mjs). */
 import fs from "node:fs";
 import path from "node:path";
+import zlib from "node:zlib";
 import { fileURLToPath } from "node:url";
 const root = path.dirname(fileURLToPath(import.meta.url));
 const samples = path.join(root, "..", "samples");
-const b64 = (p) => fs.readFileSync(p).toString("base64");
+// DEFLATE the bytes (matches the app's enc:"deflate") so the test state stays small
+const b64 = (p) => zlib.deflateSync(fs.readFileSync(p)).toString("base64");
 
 const state = {
   v: 1,
@@ -20,8 +22,8 @@ const state = {
     gridOn: true,
   },
   files: [
-    { id: "f1", name: "two_blocks.obj", format: "obj", data: b64(path.join(samples, "two_blocks.obj")) },
-    { id: "f2", name: "wedge.stl", format: "stl", data: b64(path.join(samples, "wedge.stl")) },
+    { id: "f1", name: "two_blocks.obj", format: "obj", enc: "deflate", data: b64(path.join(samples, "two_blocks.obj")) },
+    { id: "f2", name: "wedge.stl", format: "stl", enc: "deflate", data: b64(path.join(samples, "wedge.stl")) },
   ],
   parts: [
     { fileId: "f1", index: 0, name: "Base Plate", color: 0xbfc4cb, visible: true },

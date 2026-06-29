@@ -509,7 +509,12 @@ function addFile(name, buffer, opts) {
       if (!object) { toast("Could not read " + name); resolve(false); return; }
       const fileId = opts.fileId || uid("f");
       if (!opts.skipStore) {
-        state.files.push({ id: fileId, name, format, data: abToB64(buffer) });
+        const fileRec = { id: fileId, name, format };
+        // DEFLATE the raw bytes so the embedded/saved copy is a fraction of the size
+        // (OBJ/STL text compresses ~85-90%). Falls back to raw if pako is unavailable.
+        try { fileRec.data = abToB64(pako.deflate(new Uint8Array(buffer))); fileRec.enc = "deflate"; }
+        catch (e) { console.error("deflate failed, storing raw", name, e); fileRec.data = abToB64(buffer); }
+        state.files.push(fileRec);
       }
       const n = registerObject(object, fileId, opts.metaParts);
       if (n === 0) toast("No geometry found in " + name);
@@ -1572,7 +1577,7 @@ function serializeState() {
   return {
     v: 1,
     meta: Object.assign({}, state.meta),
-    files: state.files.map((f) => ({ id: f.id, name: f.name, format: f.format, data: f.data })),
+    files: state.files.map((f) => ({ id: f.id, name: f.name, format: f.format, enc: f.enc, data: f.data })),
     parts: state.parts.map((p) => {
       const o = { fileId: p.fileId, index: p.index, name: p.name, color: p.color, visible: p.visible };
       const E2 = XFORM_EPS * XFORM_EPS;
@@ -1654,7 +1659,9 @@ function loadFromState(data) {
 
   const files = data.files || [];
   const tasks = files.map((f) => {
-    const buf = b64ToAb(f.data);
+    let buf = b64ToAb(f.data);
+    // any truthy enc means the bytes are compressed (wrapper auto-detected); no enc = raw, back-compat
+    if (f.enc) { try { buf = inflateAuto(new Uint8Array(buf)).buffer; } catch (e) { console.error("inflate failed", f.name, e); } }
     const metaParts = (partsByFile[f.id] || []).sort((a, b) => a.index - b.index);
     return addFile(f.name, buf, { format: f.format, fileId: f.id, metaParts, fromState: true });
   });
@@ -1750,6 +1757,15 @@ function b64ToAb(b64) {
   const bin = atob(b64); const len = bin.length; const bytes = new Uint8Array(len);
   for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
   return bytes.buffer;
+}
+/* Inflate DEFLATE data regardless of how the producer wrapped it, so any language's built-in
+   works headless: zlib (Python zlib.compress / Node deflateSync / .NET ZLibStream), raw deflate
+   (.NET DeflateStream), or gzip (Python gzip.compress / .NET GZipStream). The in-app Save writes
+   zlib, so that common path succeeds on the first try. */
+function inflateAuto(u8) {
+  try { return pako.inflate(u8); } catch (_) {}      // zlib  (RFC 1950)
+  try { return pako.inflateRaw(u8); } catch (_) {}   // raw   (RFC 1951)
+  return pako.ungzip(u8);                             // gzip  (RFC 1952)
 }
 
 const EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';

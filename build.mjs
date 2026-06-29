@@ -27,7 +27,7 @@ const favSvg = read("src/favicon.svg");
 const favData = "data:image/svg+xml;base64," + Buffer.from(favSvg, "utf8").toString("base64");
 html = html.replace(
   /<!--\[\[FAVICON\]\]--><link rel="icon" type="image\/svg\+xml" href="src\/favicon\.svg">/,
-  `<link rel="icon" type="image/svg+xml" href="${favData}">`
+  () => `<link rel="icon" type="image/svg+xml" href="${favData}">`   // function replacement: no $ pattern substitution
 );
 
 // 1) inline stylesheet (drop the Light panel's CSS too when the panel is disabled)
@@ -39,7 +39,7 @@ if (!lightPanel) {
 }
 html = html.replace(
   /<!--\[\[STYLE\]\]--><link rel="stylesheet" href="src\/styles\.css">/,
-  "<style>\n" + css + "\n</style>"
+  () => "<style>\n" + css + "\n</style>"   // function replacement: no $ pattern substitution
 );
 
 // 2) inline scripts in order
@@ -51,6 +51,7 @@ const scripts = [
   "vendor/STLLoader.js",
   "vendor/GLTFLoader.js",
   "vendor/CSS2DRenderer.js",
+  "vendor/pako.min.js",
   "src/app.js",
 ];
 for (const s of scripts) {
@@ -60,7 +61,11 @@ for (const s of scripts) {
   const code = read(s).replace(/<\/script>/gi, "<\\/script>").replace(/<!--/g, "<\\!--");
   const tag = `<script src="${s}"></script>`;
   if (!html.includes(tag)) throw new Error("Missing script tag for " + s);
-  html = html.replace(tag, "<script>\n" + code + "\n</script>");
+  // Use a function replacement: a string replacement would interpret $&, $`, $', $$
+  // in `code` as special patterns (e.g. pako's minified "$&&" injects the matched tag,
+  // smuggling a literal close-tag into the script and truncating it). A function returns
+  // the value verbatim with no $ substitution.
+  html = html.replace(tag, () => "<script>\n" + code + "\n</script>");
 }
 
 // 3) optionally embed a prebuilt state for testing

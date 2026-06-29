@@ -29,7 +29,7 @@ node tools/make_test_state.mjs        # rebuild tools/test_state.json from the s
 On boot, `app.js` captures `PRISTINE_HTML = document.documentElement.outerHTML` **before mutating anything**. "Save file" reproduces that HTML with fresh JSON swapped into the `<script id="embedded-data">` block. Consequence: **source must never contain a literal `</script>` or `<!--` inside a script** — those flip the HTML tokenizer and the saved page silently fails to boot. Write such sequences split/escaped (see the regexes in `saveFile` and `build.mjs`, written with `[<]` and backslash-escapes on purpose).
 
 ### State is the single source of truth
-The `state` object (meta, files, parts, measurements, annotations, section) is canonical. `serializeState()` ↔ `loadFromState()` is the round-trip used by both Save and the external CAD integration. `state.files[].data` is base64 of the raw model bytes; geometry is parsed from there on every load.
+The `state` object (meta, files, parts, measurements, annotations, section) is canonical. `serializeState()` ↔ `loadFromState()` is the round-trip used by both Save and the external CAD integration. `state.files[].data` is base64 of the model bytes — DEFLATE-compressed (via bundled `pako`) when `state.files[].enc === "deflate"`, raw when `enc` is absent (back-compat). Compression happens once at import (`addFile`); `loadFromState` inflates before parsing geometry. See EXPORT_FORMAT.md for the `enc` field.
 
 **Runtime part ids (`uid("p")`) are regenerated on each load**, so anything persisted that references a part uses a stable `{fileId, index}` ref instead (see `partRef`/`partIdFromRef`) — e.g. marker→part bindings.
 
