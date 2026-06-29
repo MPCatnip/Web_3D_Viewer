@@ -239,6 +239,79 @@
     </div></div>
   </div>
 
+  <!-- ===== LIGHT LAB (DEVELOPER — lighting / material explorer; auto-stripped from the build when DEV.lightPanel is false in src/app.js) ===== -->
+  <div class="panel lightlab collapsible collapsed">
+    <div class="panel-head"><span class="ph-title">Light</span><span class="sub">experiment</span><svg class="collapse-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></div>
+    <div class="panel-body"><div class="pb-inner">
+    <div class="divider"></div>
+
+    <div class="tool-group">
+      <div class="field-label">Lighting preset</div>
+      <div class="tool-row chips ll-presets">
+        <span class="chip ll-preset" data-preset="studio">Studio</span>
+        <span class="chip ll-preset" data-preset="threePoint">3-Point</span>
+        <span class="chip ll-preset" data-preset="soft">Soft</span>
+        <span class="chip ll-preset" data-preset="dramatic">Dramatic</span>
+        <span class="chip ll-preset" data-preset="top">Top</span>
+        <span class="chip ll-preset" data-preset="coolShop">Cool shop</span>
+        <span class="chip ll-preset" data-preset="sunset">Sunset</span>
+        <span class="chip ll-preset" data-preset="moonlight">Moonlight</span>
+        <span class="chip ll-preset" data-preset="blueprint">Blueprint</span>
+        <span class="chip ll-preset" data-preset="ember">Ember</span>
+      </div>
+
+      <div class="ll-slider"><span class="ll-lbl">Key</span><input type="range" id="llKey" min="0" max="200" value="60"><span class="ll-val" id="llKeyV">0.60</span></div>
+      <div class="ll-slider"><span class="ll-lbl">Fill</span><input type="range" id="llFill" min="0" max="150" value="55"><span class="ll-val" id="llFillV">0.55</span></div>
+      <div class="ll-slider"><span class="ll-lbl">Exposure</span><input type="range" id="llExp" min="40" max="200" value="100"><span class="ll-val" id="llExpV">1.00</span></div>
+      <div class="ll-slider"><span class="ll-lbl">Rotate</span><input type="range" id="llAz" min="0" max="360" value="35" title="Key azimuth. With Headlight on, this offsets the light sideways from your view."><span class="ll-val" id="llAzV">35&deg;</span></div>
+      <div class="ll-slider"><span class="ll-lbl">Height</span><input type="range" id="llEl" min="-20" max="90" value="47" title="Key elevation. With Headlight on, this lifts the light above your view."><span class="ll-val" id="llElV">47&deg;</span></div>
+
+      <div class="toggle-row" data-toggle="ll-headlight"><span class="t-label">Headlight (follow camera)</span><span id="swHeadlight" class="switch"></span></div>
+      <div class="toggle-row" data-toggle="ll-shadows"><span class="t-label">Shadows</span><span id="swShadows" class="switch on"></span></div>
+      <div class="toggle-row" data-toggle="ll-ground"><span class="t-label">Ground shadow</span><span id="swGround" class="switch"></span></div>
+      <div class="toggle-row" data-toggle="ll-spin"><span class="t-label">Rotate lights (around origin)</span><span id="swSpin" class="switch"></span></div>
+
+      <div class="field-label" style="margin-top:12px">Tone mapping</div>
+      <div class="tool-row chips ll-tonemap">
+        <span class="chip ll-tm active" data-tm="none">None</span>
+        <span class="chip ll-tm" data-tm="aces">ACES</span>
+        <span class="chip ll-tm" data-tm="reinhard">Reinhard</span>
+        <span class="chip ll-tm" data-tm="neutral">Neutral</span>
+      </div>
+
+      <div class="field-label" style="margin-top:12px">Background</div>
+      <div class="tool-row chips ll-bg">
+        <span class="chip ll-bgc active" data-bg="#F9FAFA">Light</span>
+        <span class="chip ll-bgc" data-bg="#4a4f55">Grey</span>
+        <span class="chip ll-bgc" data-bg="#23282d">Dark</span>
+        <span class="chip ll-bgc" data-bg="#ffffff">White</span>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="tool-group">
+      <div class="field-label">Material</div>
+      <div class="ll-slider"><span class="ll-lbl">Rough</span><input type="range" id="llRough" min="0" max="100" value="60"><span class="ll-val" id="llRoughV">0.60</span></div>
+      <div class="ll-slider"><span class="ll-lbl">Metal</span><input type="range" id="llMetal" min="0" max="100" value="0"><span class="ll-val" id="llMetalV">0.00</span></div>
+      <div class="toggle-row" data-toggle="ll-flat"><span class="t-label">Flat shading (facets)</span><span id="swFlat" class="switch"></span></div>
+      <div class="toggle-row" data-toggle="ll-clay"><span class="t-label">Clay (uniform colour)</span><span id="swClay" class="switch"></span></div>
+      <div class="toggle-row" data-toggle="ll-edges"><span class="t-label">Edge overlay</span><span id="swEdges" class="switch"></span></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="tool-group">
+      <div class="ll-readout" id="llReadout"></div>
+      <div class="tool-row">
+        <button id="llLog" class="btn" title="Copy the current setup to the clipboard + console so it can be baked into the defaults">Log setup</button>
+        <button id="llReset" class="btn">Reset</button>
+      </div>
+    </div>
+    </div></div>
+  </div>
+  <!-- ===== /LIGHT LAB ===== -->
+
   <!-- objects -->
   <div class="panel objects collapsible collapsed">
     <div class="panel-head"><span class="ph-title">Objects</span><span class="sub" id="objCount">0 parts</span><svg class="collapse-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></div>

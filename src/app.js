@@ -20,10 +20,30 @@ const BRAND = {
   confidential: "",            // default confidential notice ("" = hidden)
 };
 
+/* ----------------------------------------------------------------------------
+   DEVELOPER OPTIONS  (flip in source; not part of saved view state)
+   ----------------------------------------------------------------------------
+   lightPanel    Show the in-app "Light" panel — a lighting / material explorer
+                 for dialling in a look. Set false to hide it from the UI.
+   lightPreset   Lighting applied on load. Use null to keep the built-in
+                 hand-tuned default, or one of LIGHT_PRESETS:
+                 "studio" | "threePoint" | "soft" | "dramatic" | "top" |
+                 "coolShop" | "sunset" | "moonlight" | "blueprint" | "ember".
+                 (Tune values live with the panel, then bake the winner here.)
+---------------------------------------------------------------------------- */
+const DEV = {
+  lightPanel:  true,
+  lightPreset: "dramatic",
+};
+
 const NEUTRAL_COLOR = 0x9099A2;      // default shaded part color (mid neutral grey)
 const CAP_COLOR     = 0xb0534e;      // muted red section caps
 const SELECT_EMIS   = 0x12385f;      // selection highlight (emissive)
 const BG_COLOR      = 0xF9FAFA;
+const CLAY_COLOR    = 0xc3c7cc;      // LIGHT LAB: uniform "clay" override colour
+/* LIGHT LAB (temporary): current material knobs, read by makePartMaterial so parts
+   loaded while the panel is active inherit the explored look. */
+const MAT = { roughness: 0.6, metalness: 0.0, flat: false };
 const $  = (id) => document.getElementById(id);
 const AXES = {
   x: new THREE.Vector3(1, 0, 0),
@@ -66,9 +86,11 @@ let modelRoot;      // holds loaded geometry; rotated so file "up" -> world +Y
 let markerRoot;     // child of modelRoot: measurements + annotations (file space)
 let gridHelper;
 let shadowLight;    // the key light; also casts the soft self-shadow
+let ambLight, hemiLight, keyLight, keyMainLight, fillLight, rimLight;   // LIGHT LAB: hoisted so the panel can tweak them live
 const viewportEl = $("viewport");
 
 function initThree() {
+  installNeutralToneMapping();   // LIGHT LAB: register Khronos PBR Neutral before the renderer compiles anything
   scene = new THREE.Scene();
   scene.background = new THREE.Color(BG_COLOR);
 
@@ -114,32 +136,34 @@ function initThree() {
 
   // Lighting: a hemisphere gradient (top brighter than bottom) gives every face a
   // readable tone — kept below clipping so even a white part shows falloff — plus a
-  // gentle key for a directional cue.
-  scene.add(new THREE.AmbientLight(0xffffff, 0.2));
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x333333, 0.55);
-  scene.add(hemi);
+  // gentle key for a directional cue. (LIGHT LAB hoists these to module scope so the
+  // temporary Light panel can drive their intensities/colours live.)
+  ambLight = new THREE.AmbientLight(0xffffff, 0.2);
+  scene.add(ambLight);
+  hemiLight = new THREE.HemisphereLight(0xffffff, 0x333333, 0.55);
+  scene.add(hemiLight);
 
   // The key light is split in two so the self-shadow can be really faint without
   // flattening the shading: a low-intensity shadow CASTER plus a same-direction
   // non-casting light carrying the rest of the key brightness. Lit faces get the full
   // KEY_TOTAL; shadowed faces lose only the caster's small SHADOW_SHARE.
   const KEY_TOTAL = 0.6, SHADOW_SHARE = 0.1;
-  const key = new THREE.DirectionalLight(0xffffff, SHADOW_SHARE); key.position.set(0.7, 1.3, 1.0);
-  const keyMain = new THREE.DirectionalLight(0xffffff, KEY_TOTAL - SHADOW_SHARE); keyMain.position.set(0.7, 1.3, 1.0);
-  const fill = new THREE.DirectionalLight(0xffffff, 0.34); fill.position.set(-1.1, 0.4, -0.6);
-  const rim = new THREE.DirectionalLight(0xffffff, 0.28); rim.position.set(0.2, -0.9, -0.8);
+  keyLight = new THREE.DirectionalLight(0xffffff, SHADOW_SHARE); keyLight.position.set(0.7, 1.3, 1.0);
+  keyMainLight = new THREE.DirectionalLight(0xffffff, KEY_TOTAL - SHADOW_SHARE); keyMainLight.position.set(0.7, 1.3, 1.0);
+  fillLight = new THREE.DirectionalLight(0xffffff, 0.34); fillLight.position.set(-1.1, 0.4, -0.6);
+  rimLight = new THREE.DirectionalLight(0xffffff, 0.28); rimLight.position.set(0.2, -0.9, -0.8);
 
-  // Only `key` casts the soft self-shadow. Its frustum + distance are sized to the
+  // Only `keyLight` casts the soft self-shadow. Its frustum + distance are sized to the
   // model in updateShadowCamera(); only the *direction* (its position here) matters now.
-  shadowLight = key;
-  key.castShadow = true;
-  key.shadow.mapSize.set(2048, 2048);
-  key.shadow.bias = -0.0002;            // small depth offset to kill self-shadow acne
-  key.shadow.radius = 8;               // penumbra blur (VSM) — higher = softer edges
-  key.shadow.blurSamples = 35;          // smoothness of that blur
-  scene.add(key.target);                // target must be in the scene graph to take effect
+  shadowLight = keyLight;
+  keyLight.castShadow = true;
+  keyLight.shadow.mapSize.set(2048, 2048);
+  keyLight.shadow.bias = -0.0002;       // small depth offset to kill self-shadow acne
+  keyLight.shadow.radius = 8;           // penumbra blur (VSM) — higher = softer edges
+  keyLight.shadow.blurSamples = 35;     // smoothness of that blur
+  scene.add(keyLight.target);           // target must be in the scene graph to take effect
 
-  scene.add(key, keyMain, fill, rim);
+  scene.add(keyLight, keyMainLight, fillLight, rimLight);
 
   modelRoot = new THREE.Group();
   markerRoot = new THREE.Group();
@@ -180,6 +204,7 @@ function animate() {
   requestAnimationFrame(animate);
   controls.update();
   updateMarkerScales();
+  updateLightLab();          // LIGHT LAB: headlight follows the camera
   renderer.render(scene, activeCam);
   labelRenderer.render(scene, activeCam);
 }
@@ -294,9 +319,11 @@ function applyCameraClip(dist, radius) {
 
 /* Fit the directional shadow's orthographic frustum + distance to the model so the
    self-shadow stays crisp at any model scale (CAD parts range from mm to metres). */
-const SHADOW_DIR = new THREE.Vector3(0.7, 1.3, 1.0).normalize();   // matches key-light direction
+let SHADOW_DIR = new THREE.Vector3(0.7, 1.3, 1.0).normalize();   // matches key-light direction (LIGHT LAB retargets this)
+let _shadowCenter = null, _shadowRadius = 0;                     // LIGHT LAB: last fit, so the key direction can be re-aimed
 function updateShadowCamera(center, radius) {
   if (!shadowLight || !center) return;
+  _shadowCenter = center.clone(); _shadowRadius = radius;
   const r = Math.max(radius, 1e-3);
   const dist = r * 4;
   shadowLight.position.copy(center).addScaledVector(SHADOW_DIR, dist);
@@ -313,6 +340,7 @@ function updateShadowCamera(center, radius) {
   // leaving a hard edge floating off the surface. The VSM blur hides most acne, so a
   // light touch is enough.
   shadowLight.shadow.normalBias = r * 0.0015;
+  if (groundCatcher && groundCatcher.visible) positionGroundCatcher();   // LIGHT LAB: keep the floor under the model
 }
 
 /* Fit-to-view: reframe to the model WITHOUT changing the viewing angle (scale only). */
@@ -369,9 +397,9 @@ function setProjection(mode) {
 function makePartMaterial(colorHex) {
   return new THREE.MeshStandardMaterial({
     color: new THREE.Color(colorHex),
-    roughness: 0.6, metalness: 0.0,   // a little specular so dark parts still catch light
+    roughness: MAT.roughness, metalness: MAT.metalness,   // LIGHT LAB-driven; defaults give a little specular so dark parts catch light
     side: THREE.DoubleSide,
-    flatShading: false,
+    flatShading: MAT.flat,
   });
 }
 
@@ -437,6 +465,10 @@ function registerObject(object3d, fileId, metaParts) {
     mesh.castShadow = true;       // each part shadows itself and the others
     mesh.receiveShadow = true;
     modelRoot.add(mesh);
+
+    // LIGHT LAB: inherit the active exploration look on parts loaded while it's on
+    if (LIGHT_LAB.clay) mesh.material.color.set(CLAY_COLOR);
+    if (LIGHT_LAB.edges) addPartEdges(mesh);
 
     // Two transform layers (see serializeState):
     //  - loader*: the pristine geometry-space pose; the immutable anchor for saved deltas
@@ -1744,6 +1776,383 @@ function toggleRow(name, handler) {
 /* ----------------------------------------------------------------------------
    Wire up the UI
 ---------------------------------------------------------------------------- */
+/* ============================================================================
+   LIGHT LAB  (DEVELOPER — lighting / material exploration sandbox)
+   ----------------------------------------------------------------------------
+   A self-contained playground for finding a lighting + material setup that
+   makes shapes easy to read. Nothing here is serialized into saved files; it
+   only drives the live scene.
+
+   Toggle the panel with DEV.lightPanel (top of file). Pick the lighting that
+   ships with the viewer via DEV.lightPreset. To remove the feature entirely:
+   delete the DEV block usage, this block, the wireLightLab() call in wireUI(),
+   the updateLightLab() call in animate(), the installNeutralToneMapping() call
+   in initThree(), the boot() preset line, the two guarded lines in
+   registerObject(), the `.lightlab` panel in index.html and its CSS.
+   ========================================================================== */
+const LIGHT_LAB = {
+  key: 0.6, casterShare: 0.18, fill: 0.55, exposure: 1.0,
+  az: 35, el: 47, tonemap: "none", bg: "#F9FAFA",
+  headlight: false, shadows: true, ground: false, spin: false,
+  rough: 0.6, metal: 0.0, flat: false, clay: false, edges: false,
+};
+let groundCatcher = null;   // LIGHT LAB: ShadowMaterial floor plane that catches the cast shadow
+const FILL_BASE = new THREE.Vector3(-1.1, 0.4, -0.6);   // LIGHT LAB: rest directions of the fill / rim lights
+const RIM_BASE  = new THREE.Vector3(0.2, -0.9, -0.8);   //   (orbited around origin by "Rotate lights")
+const LIGHT_SPIN_DPS = 36;   // light-orbit speed, degrees/second
+let _lightOrbit = 0, _llPrevT = 0;
+
+const TONEMAPS = {
+  none:     THREE.NoToneMapping,
+  aces:     THREE.ACESFilmicToneMapping,
+  reinhard: THREE.ReinhardToneMapping,
+  neutral:  THREE.CustomToneMapping,   // Khronos PBR Neutral, grafted in by installNeutralToneMapping()
+};
+
+/* Khronos PBR Neutral tone mapping isn't in three r137 (it landed in r166 as
+   NeutralToneMapping). Graft the operator into the CustomToneMapping slot by
+   patching its shader chunk — runs once, before any material compiles. It tone-
+   maps highlights toward white while preserving hue/saturation, which keeps the
+   coloured presets vivid without the ACES hue shift. */
+let _neutralInstalled = false;
+function installNeutralToneMapping() {
+  if (_neutralInstalled) return;
+  _neutralInstalled = true;
+  const chunk = THREE.ShaderChunk.tonemapping_pars_fragment;
+  const stub = "vec3 CustomToneMapping( vec3 color ) { return color; }";
+  if (!chunk || chunk.indexOf(stub) === -1) return;   // three version changed: leave CustomToneMapping as-is
+  THREE.ShaderChunk.tonemapping_pars_fragment = chunk.replace(stub,
+    "vec3 CustomToneMapping( vec3 color ) {" +
+    "  color *= toneMappingExposure;" +
+    "  const float StartCompression = 0.8 - 0.04;" +
+    "  const float Desaturation = 0.15;" +
+    "  float x = min( color.r, min( color.g, color.b ) );" +
+    "  float offset = x < 0.08 ? x - 6.25 * x * x : 0.04;" +
+    "  color -= offset;" +
+    "  float peak = max( color.r, max( color.g, color.b ) );" +
+    "  if ( peak < StartCompression ) return color;" +
+    "  float d = 1.0 - StartCompression;" +
+    "  float newPeak = 1.0 - d * d / ( peak + d - StartCompression );" +
+    "  color *= newPeak / peak;" +
+    "  float g = 1.0 - 1.0 / ( Desaturation * ( peak - newPeak ) + 1.0 );" +
+    "  return mix( color, vec3( newPeak ), g );" +
+    "}");
+}
+
+/* Each preset is a full lighting + tone setup. Applying one pushes its values
+   into LIGHT_LAB, the lights, and the panel controls. All presets use ACES so
+   the Exposure slider is always meaningful (boot stays on "none" = current look
+   until the user picks a preset). */
+const LIGHT_PRESETS = {
+  studio:     { key:0.65, casterShare:0.18, fill:0.55, rim:0.28, az:35, el:47, exposure:1.0,  tonemap:"neutral", bg:"#F9FAFA", keyColor:0xffffff, rimColor:0xffffff, hemiSky:0xffffff, hemiGround:0x333333 },
+  threePoint: { key:0.95, casterShare:0.20, fill:0.30, rim:0.55, az:40, el:35, exposure:1.0,  tonemap:"neutral", bg:"#F9FAFA", keyColor:0xffffff, rimColor:0xffffff, hemiSky:0xffffff, hemiGround:0x222222 },
+  soft:       { key:0.35, casterShare:0.08, fill:0.90, rim:0.12, az:25, el:55, exposure:1.05, tonemap:"neutral", bg:"#F9FAFA", keyColor:0xffffff, rimColor:0xffffff, hemiSky:0xffffff, hemiGround:0x555555 },
+  dramatic:   { key:1.25, casterShare:0.45, fill:0.33, rim:0.35, az:55, el:28, exposure:1.06,  tonemap:"neutral", bg:"#F9FAFA", keyColor:0xffffff, rimColor:0xbfd4ff, hemiSky:0x445066, hemiGround:0x111111 },
+  top:        { key:0.85, casterShare:0.25, fill:0.40, rim:0.15, az:20, el:82, exposure:1.0,  tonemap:"neutral",    bg:"#F9FAFA", keyColor:0xffffff, rimColor:0xffffff, hemiSky:0xffffff, hemiGround:0x333333 },
+  coolShop:   { key:0.85, casterShare:0.22, fill:0.50, rim:0.40, az:50, el:40, exposure:1.0,  tonemap:"neutral",    bg:"#F9FAFA", keyColor:0xfff1dc, rimColor:0xcfe3ff, hemiSky:0xcfe3ff, hemiGround:0x1d2530 },
+  // warm/cool stylised rigs (in the Cool shop / Dramatic family) — Neutral tone mapping keeps the tints vivid
+  sunset:     { key:1.05, casterShare:0.35, fill:0.35, rim:0.45, az:65, el:22, exposure:1.0,  tonemap:"neutral", bg:"#F9FAFA", keyColor:0xffd29a, rimColor:0x9fc4ff, hemiSky:0xffe3c0, hemiGround:0x241a14 },
+  moonlight:  { key:1.15, casterShare:0.42, fill:0.14, rim:0.40, az:50, el:30, exposure:1.0,  tonemap:"neutral", bg:"#F9FAFA", keyColor:0xbcd2ff, rimColor:0xdfeaff, hemiSky:0x4a5e80, hemiGround:0x0d1018 },
+  blueprint:  { key:0.55, casterShare:0.18, fill:0.40, rim:0.70, az:35, el:45, exposure:1.0,  tonemap:"neutral", bg:"#F9FAFA", keyColor:0xeaf6ff, rimColor:0x49d6ff, hemiSky:0x86c8e6, hemiGround:0x0a1620 },
+  ember:      { key:1.20, casterShare:0.40, fill:0.20, rim:0.50, az:40, el:18, exposure:1.0,  tonemap:"neutral", bg:"#F9FAFA", keyColor:0xff9a5a, rimColor:0x7fb6ff, hemiSky:0x5a3a2a, hemiGround:0x140c08 },
+};
+
+/* unit direction from azimuth (around up) + elevation (above horizon) */
+function lightDir(azDeg, elDeg) {
+  const az = THREE.MathUtils.degToRad(azDeg), el = THREE.MathUtils.degToRad(elDeg);
+  return new THREE.Vector3(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az));
+}
+
+function applyKeyIntensity() {
+  if (!keyLight) return;
+  keyLight.intensity     = LIGHT_LAB.key * LIGHT_LAB.casterShare;
+  keyMainLight.intensity = LIGHT_LAB.key * (1 - LIGHT_LAB.casterShare);
+}
+function applyFillIntensity() {
+  if (!hemiLight) return;
+  hemiLight.intensity = LIGHT_LAB.fill;
+  ambLight.intensity  = LIGHT_LAB.fill * 0.35;
+}
+/* Point the key (and the shadow it casts) along the azimuth/elevation dir. In
+   headlight mode the per-frame updateLightLab() owns the direction instead. */
+function applyKeyDirection() {
+  if (LIGHT_LAB.headlight || !keyMainLight) return;
+  const d = lightDir(LIGHT_LAB.az, LIGHT_LAB.el);
+  keyMainLight.position.copy(d);
+  keyMainLight.target.position.set(0, 0, 0); keyMainLight.target.updateMatrixWorld();
+  SHADOW_DIR.copy(d).normalize();
+  if (_shadowCenter) updateShadowCamera(_shadowCenter, _shadowRadius);
+}
+function applyShadows() {
+  if (keyLight) keyLight.castShadow = LIGHT_LAB.shadows;   // headlight now has a real offset, so its shadow is meaningful
+}
+function applyExposure() { if (renderer) renderer.toneMappingExposure = LIGHT_LAB.exposure; }
+function applyToneMap() {
+  if (!renderer) return;
+  renderer.toneMapping = TONEMAPS[LIGHT_LAB.tonemap] || THREE.NoToneMapping;
+  markMaterialsDirty();   // tone mapping is compiled into the shaders
+}
+function markMaterialsDirty() {
+  scene.traverse((o) => {
+    if (!o.isMesh || !o.material) return;
+    (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { m.needsUpdate = true; });
+  });
+}
+
+/* Reposition the shadow caster along `dir` without rebuilding its frustum (size
+   depends only on the model radius, which hasn't changed). */
+function aimShadow(dir) {
+  if (!shadowLight || !_shadowCenter) return;
+  const dist = Math.max(_shadowRadius, 1e-3) * 4;
+  shadowLight.position.copy(_shadowCenter).addScaledVector(dir, dist);
+  shadowLight.target.position.copy(_shadowCenter);
+  shadowLight.target.updateMatrixWorld();
+}
+
+/* The headlight: the key follows the camera, but offset by the Rotate/Height
+   sliders so it sits up-and-to-the-side of the viewer (a studio key that tracks
+   your eye) rather than dead-on — which would flatten every form. The offset is
+   applied in the camera's frame, so the light keeps a constant angle relative to
+   the view as you orbit. Runs each frame from animate(); a no-op when off. */
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
+const _camDir = new THREE.Vector3(), _viewRight = new THREE.Vector3(),
+      _viewUp = new THREE.Vector3(), _Ldir = new THREE.Vector3(), _qOff = new THREE.Quaternion();
+function updateLightLab() {
+  if (!keyMainLight) return;
+  const now = performance.now();
+  const dt = _llPrevT ? Math.min((now - _llPrevT) / 1000, 0.1) : 0;   // clamp so a tab-stall doesn't lurch
+  _llPrevT = now;
+
+  if (LIGHT_LAB.headlight && activeCam) {   // key offset from the camera (a studio key that tracks your eye)
+    activeCam.getWorldDirection(_camDir);   // points into the scene
+    _viewRight.crossVectors(_camDir, WORLD_UP);
+    if (_viewRight.lengthSq() < 1e-6) _viewRight.set(1, 0, 0);   // looking straight up/down: pick a stable right
+    _viewRight.normalize();
+    _viewUp.crossVectors(_viewRight, _camDir).normalize();
+    _Ldir.copy(_camDir).negate();           // base: straight from the viewer
+    _qOff.setFromAxisAngle(_viewRight, THREE.MathUtils.degToRad(LIGHT_LAB.el)); _Ldir.applyQuaternion(_qOff);   // lift up
+    _qOff.setFromAxisAngle(_viewUp,    THREE.MathUtils.degToRad(LIGHT_LAB.az)); _Ldir.applyQuaternion(_qOff);   // swing aside
+    aimRig(_Ldir.normalize(), 0);
+    return;
+  }
+  if (LIGHT_LAB.spin) {                      // orbit the whole rig around the origin's vertical axis
+    _lightOrbit = (_lightOrbit + LIGHT_SPIN_DPS * dt) % 360;
+    aimRig(lightDir(LIGHT_LAB.az + _lightOrbit, LIGHT_LAB.el), _lightOrbit);
+  }
+}
+
+/* Aim the key along `keyDirWorld` and swing fill+rim around the origin's Y axis by
+   `orbitDeg`. Shared by the headlight and the light-orbit animation. */
+function aimRig(keyDirWorld, orbitDeg) {
+  keyMainLight.position.copy(keyDirWorld);
+  keyMainLight.target.position.set(0, 0, 0); keyMainLight.target.updateMatrixWorld();
+  SHADOW_DIR.copy(keyDirWorld);
+  if (LIGHT_LAB.shadows) aimShadow(keyDirWorld);
+  _qOff.setFromAxisAngle(WORLD_UP, THREE.MathUtils.degToRad(orbitDeg));
+  if (fillLight) fillLight.position.copy(FILL_BASE).applyQuaternion(_qOff);
+  if (rimLight)  rimLight.position.copy(RIM_BASE).applyQuaternion(_qOff);
+}
+
+/* Ground shadow: a ShadowMaterial plane on the model's floor that catches the
+   cast shadow, grounding the part and giving a strong depth cue. */
+function ensureGroundCatcher() {
+  if (groundCatcher) return groundCatcher;
+  groundCatcher = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1),
+    new THREE.ShadowMaterial({ opacity: 0.22 })
+  );
+  groundCatcher.rotation.x = -Math.PI / 2;   // lie flat in the XZ plane
+  groundCatcher.receiveShadow = true;
+  groundCatcher.renderOrder = -1;
+  scene.add(groundCatcher);
+  return groundCatcher;
+}
+function positionGroundCatcher() {
+  if (!groundCatcher) return;
+  const box = getWorldBox(); if (!box) return;
+  const c = box.getCenter(new THREE.Vector3());
+  const span = box.getSize(new THREE.Vector3()).length() * 3 + 1;
+  groundCatcher.position.set(c.x, box.min.y, c.z);
+  groundCatcher.scale.set(span, span, 1);
+}
+function setGroundShadow(on) {
+  LIGHT_LAB.ground = on;
+  if (on) { ensureGroundCatcher(); positionGroundCatcher(); }
+  if (groundCatcher) groundCatcher.visible = on;
+}
+
+/* Rotate lights: slowly orbit the whole rig around the origin so highlights and
+   shadows sweep across the part — the camera stays put. Mutually exclusive with
+   the headlight (both want to own the key direction). */
+function setLightSpin(on) {
+  LIGHT_LAB.spin = on;
+  if (on) {
+    if (LIGHT_LAB.headlight) { LIGHT_LAB.headlight = false; const sw = $("swHeadlight"); if (sw) sw.classList.remove("on"); }
+  } else {
+    _lightOrbit = 0;                 // park the rig back at its slider-defined rest pose
+    if (fillLight) fillLight.position.copy(FILL_BASE);
+    if (rimLight)  rimLight.position.copy(RIM_BASE);
+    applyKeyDirection();
+  }
+}
+
+function applyLightPreset(name) {
+  const p = LIGHT_PRESETS[name]; if (!p) return;
+  Object.assign(LIGHT_LAB, { key:p.key, casterShare:p.casterShare, fill:p.fill, az:p.az, el:p.el, exposure:p.exposure, tonemap:p.tonemap, bg:p.bg });
+  if (rimLight) { rimLight.intensity = p.rim; rimLight.color.setHex(p.rimColor); }
+  if (keyLight) { keyLight.color.setHex(p.keyColor); keyMainLight.color.setHex(p.keyColor); }
+  if (hemiLight) { hemiLight.color.setHex(p.hemiSky); hemiLight.groundColor.setHex(p.hemiGround); }
+  applyKeyIntensity(); applyFillIntensity(); applyKeyDirection();
+  applyExposure(); applyToneMap(); setBg(p.bg);
+  syncChips(".ll-preset", "preset", name);   // highlight the active preset (also when applied on boot)
+  syncLightLabUI();
+  refreshReadout();
+}
+
+/* ---- material knobs ---- */
+function eachPartMaterial(fn) { state.parts.forEach((p) => { if (p.mesh.material) fn(p.mesh.material, p); }); }
+function setRoughness(v) { MAT.roughness = v; eachPartMaterial((m) => { m.roughness = v; }); refreshReadout(); }
+function setMetalness(v) { MAT.metalness = v; eachPartMaterial((m) => { m.metalness = v; }); refreshReadout(); }
+function setFlatShading(on) {
+  MAT.flat = on;
+  eachPartMaterial((m) => { m.flatShading = on; m.needsUpdate = true; });
+}
+function setClay(on) {
+  LIGHT_LAB.clay = on;
+  eachPartMaterial((m, p) => { m.color.set(on ? CLAY_COLOR : p.color); });
+}
+
+/* Edge overlay: dark crease/silhouette lines drawn over each part — the single
+   biggest aid to reading form. Added as a child mesh so it follows transforms;
+   picking uses non-recursive raycasts, so it never interferes with selection. */
+function addPartEdges(mesh) {
+  if (mesh.userData.llEdges) { mesh.userData.llEdges.visible = true; return mesh.userData.llEdges; }
+  const eg = new THREE.EdgesGeometry(mesh.geometry, 30);   // 30° crease threshold
+  const ls = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: 0x2b3238, transparent: true, opacity: 0.5 }));
+  ls.renderOrder = 3;
+  mesh.add(ls);
+  mesh.userData.llEdges = ls;
+  return ls;
+}
+function setEdges(on) {
+  LIGHT_LAB.edges = on;
+  state.parts.forEach((p) => {
+    if (on) addPartEdges(p.mesh);
+    else if (p.mesh.userData.llEdges) p.mesh.userData.llEdges.visible = false;
+  });
+}
+
+function setBg(hex) {
+  LIGHT_LAB.bg = hex;
+  if (scene) scene.background = new THREE.Color(hex);
+  syncChips(".ll-bgc", "bg", hex);
+}
+
+function resetLightLab() {
+  Object.assign(LIGHT_LAB, {
+    key:0.6, casterShare:0.18, fill:0.55, exposure:1.0, az:35, el:47,
+    tonemap:"none", bg:"#F9FAFA", headlight:false, shadows:true, ground:false, spin:false,
+    rough:0.6, metal:0.0, flat:false, clay:false, edges:false,
+  });
+  if (rimLight) { rimLight.intensity = 0.28; rimLight.color.setHex(0xffffff); rimLight.position.set(0.2, -0.9, -0.8); }
+  if (fillLight) { fillLight.position.set(-1.1, 0.4, -0.6); }
+  if (keyLight) { keyLight.color.setHex(0xffffff); keyMainLight.color.setHex(0xffffff); }
+  if (hemiLight) { hemiLight.color.setHex(0xffffff); hemiLight.groundColor.setHex(0x333333); }
+  applyKeyIntensity(); applyFillIntensity(); applyKeyDirection(); applyShadows();
+  applyExposure(); applyToneMap(); setBg("#F9FAFA");
+  setRoughness(0.6); setMetalness(0.0); setFlatShading(false); setClay(false); setEdges(false);
+  setGroundShadow(false); setLightSpin(false);
+  syncChips(".ll-preset", "preset", null);   // no preset is "active" at the neutral default
+  syncLightLabUI();
+  refreshReadout();
+  toast("Light setup reset");
+}
+
+/* Live, copy-pasteable summary so a winning combo can be baked into defaults. */
+function refreshReadout() {
+  const el = $("llReadout"); if (!el) return;
+  const L = LIGHT_LAB;
+  const dirNote = L.headlight ? " (rel. camera)" : "";
+  el.textContent =
+    `key ${L.key.toFixed(2)}  fill ${L.fill.toFixed(2)}  rim ${(rimLight ? rimLight.intensity : 0).toFixed(2)}\n` +
+    `exposure ${L.exposure.toFixed(2)}  tone ${L.tonemap}\n` +
+    `dir az ${Math.round(L.az)}°  el ${Math.round(L.el)}°${dirNote}\n` +
+    `shadows ${L.shadows ? "on" : "off"}  ground ${L.ground ? "on" : "off"}  rot-lights ${L.spin ? "on" : "off"}\n` +
+    `mat rough ${L.rough.toFixed(2)}  metal ${L.metal.toFixed(2)}  flat ${L.flat ? "on" : "off"}`;
+}
+function logSetup() {
+  const out = {
+    lighting: { key: LIGHT_LAB.key, casterShare: LIGHT_LAB.casterShare, fill: LIGHT_LAB.fill,
+                rim: rimLight ? rimLight.intensity : 0, exposure: LIGHT_LAB.exposure, toneMapping: LIGHT_LAB.tonemap,
+                azimuth: LIGHT_LAB.az, elevation: LIGHT_LAB.el, headlight: LIGHT_LAB.headlight,
+                shadows: LIGHT_LAB.shadows, groundShadow: LIGHT_LAB.ground, rotateLights: LIGHT_LAB.spin, background: LIGHT_LAB.bg },
+    material: { roughness: LIGHT_LAB.rough, metalness: LIGHT_LAB.metal, flatShading: LIGHT_LAB.flat, clay: LIGHT_LAB.clay, edges: LIGHT_LAB.edges },
+  };
+  const json = JSON.stringify(out, null, 2);
+  console.log("[Light Lab] current setup:\n" + json);
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(json).catch(() => {});
+  toast("Setup logged to console");
+}
+
+/* Push LIGHT_LAB values into the panel controls (after a preset / reset). */
+function syncLightLabUI() {
+  const set = (id, v) => { const e = $(id); if (e) e.value = v; };
+  const txt = (id, v) => { const e = $(id); if (e) e.textContent = v; };
+  set("llKey", Math.round(LIGHT_LAB.key * 100));   txt("llKeyV", LIGHT_LAB.key.toFixed(2));
+  set("llFill", Math.round(LIGHT_LAB.fill * 100));  txt("llFillV", LIGHT_LAB.fill.toFixed(2));
+  set("llExp", Math.round(LIGHT_LAB.exposure * 100)); txt("llExpV", LIGHT_LAB.exposure.toFixed(2));
+  set("llAz", Math.round(LIGHT_LAB.az));   txt("llAzV", Math.round(LIGHT_LAB.az) + "°");
+  set("llEl", Math.round(LIGHT_LAB.el));   txt("llElV", Math.round(LIGHT_LAB.el) + "°");
+  set("llRough", Math.round(LIGHT_LAB.rough * 100)); txt("llRoughV", LIGHT_LAB.rough.toFixed(2));
+  set("llMetal", Math.round(LIGHT_LAB.metal * 100)); txt("llMetalV", LIGHT_LAB.metal.toFixed(2));
+  const sw = (id, on) => { const e = $(id); if (e) e.classList.toggle("on", on); };
+  sw("swHeadlight", LIGHT_LAB.headlight); sw("swShadows", LIGHT_LAB.shadows);
+  sw("swGround", LIGHT_LAB.ground); sw("swSpin", LIGHT_LAB.spin);
+  sw("swFlat", LIGHT_LAB.flat); sw("swClay", LIGHT_LAB.clay); sw("swEdges", LIGHT_LAB.edges);
+  syncChips(".ll-tm", "tm", LIGHT_LAB.tonemap);
+  syncChips(".ll-bgc", "bg", LIGHT_LAB.bg);
+}
+
+function wireLightLab() {
+  const panel = document.querySelector(".panel.lightlab");
+  if (!DEV.lightPanel) { if (panel) panel.remove(); return; }   // developer panel disabled in source
+  if (!panel || !$("llKey")) return;                            // panel markup absent (e.g. stripped build)
+  document.querySelectorAll(".ll-preset").forEach((c) => c.addEventListener("click", () => applyLightPreset(c.dataset.preset)));
+  const slider = (id, valId, fn, fmt) => {
+    const inp = $(id), out = $(valId);
+    inp.addEventListener("input", () => { const raw = +inp.value; fn(raw); if (out) out.textContent = fmt(raw); refreshReadout(); });
+  };
+  slider("llKey", "llKeyV", (v) => { LIGHT_LAB.key = v / 100; applyKeyIntensity(); }, (v) => (v / 100).toFixed(2));
+  slider("llFill", "llFillV", (v) => { LIGHT_LAB.fill = v / 100; applyFillIntensity(); }, (v) => (v / 100).toFixed(2));
+  slider("llExp", "llExpV", (v) => { LIGHT_LAB.exposure = v / 100; applyExposure(); }, (v) => (v / 100).toFixed(2));
+  slider("llAz", "llAzV", (v) => { LIGHT_LAB.az = v; applyKeyDirection(); }, (v) => v + "°");
+  slider("llEl", "llElV", (v) => { LIGHT_LAB.el = v; applyKeyDirection(); }, (v) => v + "°");
+  slider("llRough", "llRoughV", (v) => { LIGHT_LAB.rough = v / 100; setRoughness(v / 100); }, (v) => (v / 100).toFixed(2));
+  slider("llMetal", "llMetalV", (v) => { LIGHT_LAB.metal = v / 100; setMetalness(v / 100); }, (v) => (v / 100).toFixed(2));
+
+  toggleRow("ll-headlight", () => {
+    LIGHT_LAB.headlight = !LIGHT_LAB.headlight; $("swHeadlight").classList.toggle("on", LIGHT_LAB.headlight);
+    if (LIGHT_LAB.headlight && LIGHT_LAB.spin) { setLightSpin(false); $("swSpin").classList.remove("on"); }   // mutually exclusive
+    applyShadows(); if (!LIGHT_LAB.headlight) applyKeyDirection();   // restore aimed key when leaving headlight
+    refreshReadout();
+  });
+  toggleRow("ll-shadows", () => { LIGHT_LAB.shadows = !LIGHT_LAB.shadows; $("swShadows").classList.toggle("on", LIGHT_LAB.shadows); applyShadows(); refreshReadout(); });
+  toggleRow("ll-ground", () => { const on = !LIGHT_LAB.ground; $("swGround").classList.toggle("on", on); setGroundShadow(on); refreshReadout(); });
+  toggleRow("ll-spin", () => { const on = !LIGHT_LAB.spin; setLightSpin(on); $("swSpin").classList.toggle("on", LIGHT_LAB.spin); $("swHeadlight").classList.toggle("on", LIGHT_LAB.headlight); refreshReadout(); });
+  toggleRow("ll-flat", () => { const on = !LIGHT_LAB.flat; LIGHT_LAB.flat = on; $("swFlat").classList.toggle("on", on); setFlatShading(on); });
+  toggleRow("ll-clay", () => { const on = !LIGHT_LAB.clay; $("swClay").classList.toggle("on", on); setClay(on); });
+  toggleRow("ll-edges", () => { const on = !LIGHT_LAB.edges; $("swEdges").classList.toggle("on", on); setEdges(on); });
+
+  document.querySelectorAll(".ll-tm").forEach((c) => c.addEventListener("click", () => {
+    LIGHT_LAB.tonemap = c.dataset.tm; syncChips(".ll-tm", "tm", c.dataset.tm); applyToneMap(); refreshReadout();
+  }));
+  document.querySelectorAll(".ll-bgc").forEach((c) => c.addEventListener("click", () => setBg(c.dataset.bg)));
+
+  $("llLog").addEventListener("click", logSetup);
+  $("llReset").addEventListener("click", resetLightLab);
+  refreshReadout();
+}
+
 function wireUI() {
   // import / open
   $("btnImport").addEventListener("click", () => $("fileInput").click());
@@ -1822,6 +2231,7 @@ function wireUI() {
   wireXf("scaleU", commitPartScale);
 
   setupCollapsiblePanels();
+  wireLightLab();   // LIGHT LAB (temporary)
 
   // info panel — hover the (i) button to preview, click to pin it open
   const infoBtn = $("btnInfo"), infoPanelEl = $("infoPanel");
@@ -1993,6 +2403,7 @@ function boot() {
     setGrid(!!state.meta.gridOn);
     showOverlay("empty");
   }
+  if (DEV.lightPreset && LIGHT_PRESETS[DEV.lightPreset]) applyLightPreset(DEV.lightPreset);   // chosen boot/production lighting
 }
 
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);

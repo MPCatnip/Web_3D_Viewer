@@ -469,6 +469,30 @@ body.editing .info-edit-actions{display:flex}
 
 .part-coords .cc.cc-wide{flex:1}
 
+/* ===== LIGHT LAB (DEVELOPER — lighting / material explorer; stripped from the build when DEV.lightPanel is false) ===== */
+.lightlab{flex:0 0 auto;overflow-y:auto}
+.lightlab .tool-group{padding:10px 14px}
+.ll-slider{display:flex;align-items:center;gap:10px;margin-top:9px}
+.ll-slider .ll-lbl{width:58px;flex:none;font-size:11px;font-weight:600;color:var(--text-soft)}
+.ll-slider .ll-val{width:36px;flex:none;text-align:right;font-size:11px;color:var(--text-muted);font-variant-numeric:tabular-nums}
+.ll-slider input[type=range]{
+  flex:1;color-scheme:light;-webkit-appearance:none;appearance:none;background:transparent;outline:none;
+}
+.ll-slider input[type=range]::-webkit-slider-runnable-track{background:var(--g3);height:4px;border-radius:2px}
+.ll-slider input[type=range]::-moz-range-track{background:var(--g3);height:4px;border-radius:2px}
+.ll-slider input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:14px;height:14px;border-radius:50%;
+  background:var(--accent);border:none;margin-top:-5px;cursor:pointer;
+}
+.ll-slider input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--accent);border:none;cursor:pointer}
+.lightlab .chip{font-size:10.5px;padding:4px 10px;margin-bottom:3px}
+.ll-readout{
+  font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;line-height:1.55;
+  color:var(--text-soft);background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  padding:8px 10px;white-space:pre-wrap;word-break:break-word;margin-bottom:8px;
+}
+/* ===== /LIGHT LAB ===== */
+
 /* scrollbars */
 ::-webkit-scrollbar{width:9px;height:9px}
 ::-webkit-scrollbar-thumb{background:var(--g3);border-radius:9px;border:2px solid #fff}

@@ -10,6 +10,18 @@ const read = (p) => fs.readFileSync(path.join(root, p), "utf8");
 
 let html = read("index.html");
 
+// 0a) developer Light panel: when DEV.lightPanel is false in src/app.js, strip the
+// panel's markup + styles from the build (the inert JS stays, guarded at runtime).
+// One flag in app.js drives both the runtime toggle and this build-time removal.
+const appSrc = read("src/app.js");
+const devMatch = appSrc.match(/lightPanel:\s*(true|false)/);
+const lightPanel = devMatch ? devMatch[1] === "true" : true;
+if (!lightPanel) {
+  const before = html.length;
+  html = html.replace(/[ \t]*<!-- ===== LIGHT LAB[\s\S]*?\/LIGHT LAB ===== -->\n?/, "");
+  if (html.length === before) throw new Error("LIGHT LAB markers not found in index.html");
+}
+
 // 0) inline favicon as a self-contained data URI
 const favSvg = read("src/favicon.svg");
 const favData = "data:image/svg+xml;base64," + Buffer.from(favSvg, "utf8").toString("base64");
@@ -18,8 +30,13 @@ html = html.replace(
   `<link rel="icon" type="image/svg+xml" href="${favData}">`
 );
 
-// 1) inline stylesheet
-const css = read("src/styles.css");
+// 1) inline stylesheet (drop the Light panel's CSS too when the panel is disabled)
+let css = read("src/styles.css");
+if (!lightPanel) {
+  const before = css.length;
+  css = css.replace(/\/\* ===== LIGHT LAB[\s\S]*?\/\* ===== \/LIGHT LAB ===== \*\/\n?/, "");
+  if (css.length === before) throw new Error("LIGHT LAB markers not found in src/styles.css");
+}
 html = html.replace(
   /<!--\[\[STYLE\]\]--><link rel="stylesheet" href="src\/styles\.css">/,
   "<style>\n" + css + "\n</style>"

@@ -1,0 +1,1323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D Viewer — Style Guide</title>
+<!--
+  ============================================================
+  STYLE GUIDE — reusable look & feel for the 3D Viewer family
+  ============================================================
+  This file is a STANDALONE reference. It is NOT part of the app
+  and is not inlined by build.mjs. Open it by double-click.
+
+  It documents the visual language of the viewer so the same
+  look can be reused in other tools, pages, or panels:
+
+    • design tokens (the CSS custom properties to copy verbatim)
+    • the rules of the system (flat, light, 2px borders, pills)
+    • live, rendered examples of every core component with the
+      exact CSS beneath each one — copy/paste straight out.
+
+  How to reuse:
+    1. Copy the :root token block (Section 2) into your stylesheet.
+    2. Copy the component rules you need from the sections below.
+    3. Keep the principles in Section 1 in mind for anything new.
+  ============================================================
+-->
+<style>
+/* ============================================================
+   1. DESIGN TOKENS  —  copy this whole :root block verbatim.
+   These are the single source of truth for the look & feel.
+   Re-theme the app by editing only the accent palette at top.
+   ============================================================ */
+:root{
+  /* Accent palette — adjust these four to re-theme everything */
+  --accent:#389d86;          /* primary brand green — active states, focus, links */
+  --slate:#495965;           /* slate — primary buttons, headings, dark menu */
+  --gray:#5B6770;            /* neutral seed for the grey scale below */
+  --accent-light:#59e8b1;    /* bright mint — active borders, tints, highlights */
+
+  /* Grey scale — derived from --gray, lightening toward white.
+     Use for tracks, hairlines, subtle borders, muted icons. */
+  --g1:color-mix(in srgb, var(--gray) 85%, white);
+  --g2:color-mix(in srgb, var(--gray) 62%, white);
+  --g3:color-mix(in srgb, var(--gray) 35%, white);
+  --g4:color-mix(in srgb, var(--gray) 17%, white);
+
+  /* Tint scale — derived from --accent-light, lightening toward white.
+     Use for hover washes, selected rows, soft active backgrounds. */
+  --tint-1:color-mix(in srgb, var(--accent-light) 55%, white);
+  --tint-2:color-mix(in srgb, var(--accent-light) 35%, white);
+  --tint-3:color-mix(in srgb, var(--accent-light) 18%, white);
+  --tint-4:color-mix(in srgb, var(--accent-light) 8%, white);
+
+  /* Surfaces & text */
+  --bg:#F9FAFA;              /* app background — barely-grey */
+  --panel:#ffffff;           /* card / panel surface */
+  --border:#E1E3E7;          /* default 2px border */
+  --border-strong:#C2C7CD;   /* dividers that need to read harder */
+  --text:#2b3238;            /* primary text */
+  --text-soft:#5B6770;       /* secondary text, button labels */
+  --text-muted:#939DA7;      /* captions, hints, disabled */
+
+  /* Shape & depth */
+  --radius:14px;             /* panels / cards */
+  --radius-sm:10px;          /* buttons / inputs */
+  --shadow:0 6px 22px rgba(73,89,101,.12);    /* floating panels */
+  --shadow-sm:0 2px 8px rgba(73,89,101,.10);  /* buttons, small lifts */
+  --font:'Segoe UI',Roboto,Helvetica,Arial,system-ui,sans-serif;
+
+  /* Status colors — semantic, for badges / alerts / meters.
+     Re-theme independently of the brand accent. Each gets a soft -bg wash. */
+  --success:#2e8b6f;   --success-bg:color-mix(in srgb, var(--success) 10%, white);
+  --warning:#b9822b;   --warning-bg:color-mix(in srgb, var(--warning) 12%, white);
+  --danger:#b0413e;    --danger-bg:color-mix(in srgb, var(--danger) 9%, white);
+  --info:#3f6f9c;      --info-bg:color-mix(in srgb, var(--info) 10%, white);
+
+  /* Spacing scale — 4px base. Components round to these steps; lay out with them too. */
+  --sp-1:4px;   --sp-2:8px;   --sp-3:12px;  --sp-4:16px;
+  --sp-5:24px;  --sp-6:32px;  --sp-7:48px;  --sp-8:64px;
+  --measure:1040px;   /* default max content width for a centered .container */
+}
+
+/* ============================================================
+   GUIDE CHROME — styling for THIS document only.
+   (Not part of the design system; safe to ignore when reusing.)
+   ============================================================ */
+*{box-sizing:border-box}
+body{
+  margin:0;font-family:var(--font);color:var(--text);background:var(--bg);
+  -webkit-font-smoothing:antialiased;line-height:1.5;
+}
+.wrap{max-width:1040px;margin:0 auto;padding:48px 28px 120px}
+header.guide-head{margin-bottom:40px}
+header.guide-head .eyebrow{font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+header.guide-head h1{font-size:34px;font-weight:600;color:var(--slate);margin:8px 0 10px}
+header.guide-head p{font-size:15px;color:var(--text-soft);max-width:62ch;margin:0}
+section.doc{margin:54px 0}
+section.doc > h2{
+  font-size:13px;font-weight:700;letter-spacing:.10em;text-transform:uppercase;
+  color:var(--slate);border-bottom:2px solid var(--border);padding-bottom:10px;margin:0 0 6px;
+}
+section.doc > h2 .n{color:var(--text-muted);margin-right:10px;font-variant-numeric:tabular-nums}
+section.doc > .lede{font-size:14px;color:var(--text-soft);margin:14px 0 24px;max-width:70ch}
+.demo{
+  background:var(--panel);border:2px solid var(--border);border-radius:var(--radius);
+  padding:26px;display:flex;flex-wrap:wrap;gap:16px;align-items:center;box-shadow:var(--shadow-sm);
+}
+.demo.col{flex-direction:column;align-items:stretch}
+.demo + .src{margin-top:0}
+.src{
+  background:#2b3238;color:#e7ecef;border-radius:0 0 var(--radius) var(--radius);
+  margin:-2px 0 0;border:2px solid #2b3238;border-top:none;
+  font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.65;
+  padding:16px 20px;overflow:auto;white-space:pre;
+}
+.src .c{color:#8aa0ab}      /* comment */
+.src .p{color:#9ad9c4}      /* property / selector accent */
+.demo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;width:100%}
+.note{font-size:13px;color:var(--text-soft);background:var(--tint-4);border-left:3px solid var(--accent-light);
+       border-radius:8px;padding:12px 16px;margin:18px 0}
+.note b{color:var(--slate)}
+.principles{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;margin-top:8px}
+.principle{background:var(--panel);border:2px solid var(--border);border-radius:var(--radius-sm);padding:16px 18px;box-shadow:var(--shadow-sm)}
+.principle h3{font-size:13px;margin:0 0 6px;color:var(--slate)}
+.principle p{font-size:12.5px;color:var(--text-soft);margin:0;line-height:1.5}
+.swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;width:100%}
+.sw{border:2px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--panel)}
+.sw .chip-c{height:62px}
+.sw .meta{padding:8px 10px}
+.sw .meta .nm{font-size:12px;font-weight:600;color:var(--text)}
+.sw .meta .hex{font-size:11px;color:var(--text-muted);font-family:ui-monospace,Consolas,monospace}
+.type-row{display:flex;align-items:baseline;gap:18px;padding:10px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;width:100%}
+.type-row:last-child{border-bottom:none}
+.type-row .spec{font-size:11px;color:var(--text-muted);font-family:ui-monospace,Consolas,monospace;min-width:200px}
+.label-demo{position:relative;background:
+   linear-gradient(45deg,#e9edef 25%,transparent 25%),linear-gradient(-45deg,#e9edef 25%,transparent 25%),
+   linear-gradient(45deg,transparent 75%,#e9edef 75%),linear-gradient(-45deg,transparent 75%,#e9edef 75%);
+  background-size:18px 18px;background-position:0 0,0 9px,9px -9px,-9px 0;
+  border-radius:var(--radius);padding:34px;display:flex;gap:22px;flex-wrap:wrap}
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+.toc a{font-size:12px;font-weight:600;color:var(--text-soft);text-decoration:none;
+  border:2px solid var(--border);border-radius:999px;padding:5px 13px;background:#fff;transition:.12s}
+.toc a:hover{border-color:var(--accent-light);background:var(--tint-4);color:var(--accent)}
+.lede code,.principle code,.note code,.doc p code{font-family:ui-monospace,Consolas,monospace;font-size:.86em;
+  background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:1px 5px;color:var(--text-soft)}
+.lbox{background:var(--tint-3);border:2px solid var(--tint-1);border-radius:8px;padding:10px 14px;
+  font-size:12px;font-weight:600;color:var(--accent);text-align:center}
+.space-row{display:flex;align-items:center;gap:14px}
+.space-row .nm{font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--text-soft);width:58px;flex:none}
+.space-row .bar{height:14px;background:var(--accent);border-radius:3px;flex:none}
+.space-row .px{font-size:12px;color:var(--text-muted)}
+
+/* ============================================================
+   2. THE COMPONENT LIBRARY  —  these rules ARE the design system.
+   Everything below this banner is copy-ready for real use.
+   ============================================================ */
+
+/* ---------- Panel: the base container for everything ---------- */
+.panel{
+  background:var(--panel);
+  border:2px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+}
+.panel-head{
+  font-size:11px;font-weight:700;letter-spacing:.10em;text-transform:uppercase;
+  color:var(--slate);
+  padding:12px 14px 8px;
+}
+.panel-head .sub{float:right;color:var(--text-muted);font-weight:600;letter-spacing:.02em;text-transform:none}
+.divider{height:1px;background:var(--border);margin:0 12px}
+
+/* ---------- Buttons ---------- */
+.btn{
+  font-family:inherit;font-size:13px;color:var(--text-soft);
+  background:var(--panel);
+  border:2px solid var(--border);
+  border-radius:10px;
+  padding:8px 14px;cursor:pointer;
+  display:inline-flex;align-items:center;gap:8px;
+  transition:.12s ease;white-space:nowrap;
+}
+.btn:hover{border-color:var(--g3);background:var(--tint-4)}
+.btn:active{transform:translateY(1px)}
+.btn.active{background:var(--tint-3);border-color:var(--accent-light);color:var(--accent)}
+.btn svg{width:16px;height:16px;flex:none}
+
+.btn-primary{
+  background:var(--slate);color:#fff;border-color:var(--slate);
+  font-weight:600;padding:9px 18px;
+  box-shadow:var(--shadow-sm);
+}
+.btn-primary:hover{background:#3c4953;border-color:#3c4953}
+.btn.pill{border-radius:90px}
+
+/* square tool button used in vertical stacks */
+.vbtn{
+  font-family:inherit;font-size:11px;color:var(--text-soft);font-weight:600;
+  background:var(--panel);
+  border:2px solid var(--border);
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  transition:.12s ease;white-space:nowrap;
+  width:42px;height:42px;border-radius:12px;padding:0;
+}
+.vbtn:hover{border-color:var(--g3);background:var(--tint-4)}
+.vbtn:active{transform:translateY(1px)}
+.vbtn.active{background:var(--tint-3);border-color:var(--accent-light);color:var(--accent)}
+.vbtn svg{width:18px;height:18px;flex:none}
+
+/* round icon button */
+.icon-btn{
+  font-family:inherit;color:var(--text-soft);background:var(--panel);
+  border:2px solid var(--border);cursor:pointer;transition:.12s ease;
+  width:42px;height:42px;padding:0;border-radius:50%;
+  display:inline-flex;align-items:center;justify-content:center;
+}
+.icon-btn:hover{border-color:var(--g3);background:var(--tint-4)}
+.icon-btn.round-solid{background:var(--slate);border-color:var(--slate);color:#fff}
+.icon-btn.round-solid:hover{background:#3c4953;border-color:#3c4953}
+.icon-btn svg{width:18px;height:18px}
+
+/* ---------- Chips (pills) ---------- */
+.chip{
+  font-size:11px;font-weight:600;color:var(--text-soft);
+  border:2px solid var(--border);border-radius:999px;padding:4px 12px;cursor:pointer;background:#fff;
+  transition:.12s ease;
+}
+.chip:hover{border-color:var(--tint-1);background:var(--tint-4)}
+.chip.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+/* ---------- Toggle switch ---------- */
+.switch{width:38px;height:22px;border-radius:999px;background:var(--g3);position:relative;cursor:pointer;transition:.15s;flex:none}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.15s;box-shadow:var(--shadow-sm)}
+.switch.on{background:var(--accent)}
+.switch.on::after{left:18px}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;cursor:pointer;
+            padding:8px 6px;border-radius:9px;gap:14px}
+.toggle-row:hover{background:var(--tint-4)}
+.toggle-row .t-label{font-size:12.5px;font-weight:600;color:var(--text-soft)}
+
+/* ---------- Slider ---------- */
+.slider-row{display:flex;align-items:center;gap:10px;width:100%}
+.slider-row input[type=range]{
+  flex:1;color-scheme:light;-webkit-appearance:none;appearance:none;background:transparent;outline:none;
+}
+.slider-row input[type=range]::-webkit-slider-runnable-track{background:var(--g3);height:4px;border-radius:2px}
+.slider-row input[type=range]::-moz-range-track{background:var(--g3);height:4px;border-radius:2px}
+.slider-row input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:14px;height:14px;border-radius:50%;
+  background:var(--accent);border:none;margin-top:-5px;cursor:pointer;
+}
+.slider-row input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--accent);border:none;cursor:pointer}
+.slider-row .val{font-size:11px;color:var(--text-muted);min-width:54px;text-align:right;font-variant-numeric:tabular-nums}
+
+/* ---------- Inputs / numeric fields ---------- */
+.field-label{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin:0 0 4px}
+.text-in{
+  width:100%;font-family:inherit;font-size:13px;color:var(--text);
+  border:2px solid var(--border);border-radius:8px;padding:6px 8px;outline:none;background:#fff;transition:.12s;
+}
+.text-in:focus{border-color:var(--tint-1)}
+.val-in{
+  font:inherit;font-size:14px;color:var(--text-soft);
+  background:transparent;border:2px solid var(--g4);border-radius:6px;
+  padding:1px 6px;outline:none;font-variant-numeric:tabular-nums;width:70px;
+}
+.val-in:hover{border-color:var(--g2)}
+.val-in:focus{border-color:var(--accent)}
+
+/* ---------- List row (e.g. an object / part row) ---------- */
+.obj-list{padding:6px;width:100%}
+.obj-row{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:10px;cursor:pointer}
+.obj-row:hover{background:var(--tint-4)}
+.obj-row.selected{background:var(--tint-3);box-shadow:inset 0 0 0 2px var(--tint-1)}
+.obj-row .swatch{width:18px;height:18px;border-radius:5px;border:2px solid #fff;box-shadow:0 0 0 1px var(--g3);flex:none}
+.obj-row .oname{flex:1;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.obj-row .mini{width:26px;height:26px;border-radius:8px;border:none;background:transparent;cursor:pointer;color:var(--g1);
+               display:flex;align-items:center;justify-content:center;flex:none}
+.obj-row .mini:hover{background:#fff;color:var(--accent);box-shadow:var(--shadow-sm)}
+.obj-row .mini svg{width:15px;height:15px}
+
+/* ---------- Dark foldout menu ---------- */
+.menu{
+  width:244px;background:#3e4a53;border-radius:14px;overflow:hidden;
+  box-shadow:0 14px 36px rgba(40,49,56,.40);padding-bottom:8px;color:#fff;
+}
+.menu .panel-head{color:#c7d0d6;padding:13px 16px 8px}
+.menu .divider{background:rgba(255,255,255,.14)}
+.menu-item{display:flex;flex-direction:column;gap:2px;padding:10px 16px;cursor:pointer;border-left:3px solid transparent}
+.menu-item:hover{background:rgba(255,255,255,.10);border-left-color:var(--accent-light)}
+.menu-item .label{font-size:13.5px;font-weight:600;color:#fff;display:flex;align-items:center;gap:9px}
+.menu-item .label svg{width:15px;height:15px;opacity:.9}
+.menu-item .desc{font-size:11px;color:#c0c9d0;padding-left:24px;line-height:1.35}
+.menu-item.danger .label{color:#f3aba7}
+
+/* ---------- Floating pill bar / hint ---------- */
+.hint{
+  background:var(--slate);color:#fff;font-size:12.5px;font-weight:500;
+  padding:8px 16px;border-radius:999px;box-shadow:var(--shadow);display:inline-flex;align-items:center;gap:8px;
+}
+.hint kbd{background:rgba(255,255,255,.2);border-radius:5px;padding:1px 6px;font-family:inherit;font-size:11px}
+
+/* ---------- Status badge (confidential / notice) ---------- */
+.confidential{
+  font-size:11.5px;font-weight:600;color:#b0413e;background:#fff;border:2px solid #f0d6d4;
+  padding:7px 12px;border-radius:999px;box-shadow:var(--shadow-sm);display:inline-flex;align-items:center;gap:7px;
+}
+.confidential .dot{width:7px;height:7px;border-radius:50%;background:#cf5a55}
+
+/* ---------- Floating canvas label (CSS2D style) ---------- */
+.floatlabel{
+  font-family:var(--font);font-size:12px;font-weight:600;
+  color:var(--text);background:rgba(255,255,255,.94);border:2px solid var(--border);
+  border-radius:9px;padding:4px 9px;box-shadow:var(--shadow-sm);white-space:nowrap;
+}
+.floatlabel.measure{color:var(--accent);border-color:var(--tint-1)}
+.floatlabel.annot{color:var(--slate);border-color:var(--g3)}
+
+/* ---------- Spinner ---------- */
+.spinner{width:30px;height:30px;border-radius:50%;border:3px solid var(--g4);border-top-color:var(--accent);animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ---------- Prose: wrap any rich-text / document content ---------- */
+.prose{color:var(--text);line-height:1.6}
+.prose > :first-child{margin-top:0}
+.prose h1{font-size:30px;font-weight:600;color:var(--slate);letter-spacing:.2px;margin:0 0 .45em}
+.prose h2{font-size:21px;font-weight:600;color:var(--slate);margin:1.5em 0 .45em}
+.prose h3{font-size:16px;font-weight:700;color:var(--text);margin:1.4em 0 .35em}
+.prose h4{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);margin:1.5em 0 .4em}
+.prose p{margin:0 0 1em}
+.prose a{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--tint-1)}
+.prose a:hover{border-bottom-color:var(--accent)}
+.prose strong{font-weight:700;color:var(--text)}
+.prose code{font-family:ui-monospace,Consolas,monospace;font-size:.88em;background:var(--bg);
+  border:1px solid var(--border);border-radius:5px;padding:1px 5px;color:var(--text-soft)}
+.prose hr{border:none;border-top:2px solid var(--border);margin:1.7em 0}
+.prose blockquote{margin:1.3em 0;padding:8px 16px;border-left:3px solid var(--accent-light);
+  background:var(--tint-4);color:var(--text-soft);border-radius:0 8px 8px 0}
+
+/* ---------- Lists ---------- */
+.prose ul,.prose ol{margin:0 0 1em;padding-left:1.3em}
+.prose li{margin:.35em 0}
+.prose ul li::marker{color:var(--accent)}
+.prose ol li::marker{color:var(--text-muted);font-weight:700;font-variant-numeric:tabular-nums}
+/* key–value definition list */
+dl.kv{margin:0}
+dl.kv div{display:flex;gap:14px;padding:7px 0;border-bottom:1px solid var(--border)}
+dl.kv div:last-child{border-bottom:none}
+dl.kv dt{flex:none;width:120px;font-size:12px;font-weight:600;color:var(--text-muted)}
+dl.kv dd{margin:0;font-size:13px;color:var(--text)}
+/* checklist */
+.checklist{list-style:none;padding:0;margin:0}
+.checklist li{display:flex;align-items:flex-start;gap:10px;padding:5px 0;font-size:13px;color:var(--text)}
+.checklist li::before{content:"";flex:none;width:18px;height:18px;border-radius:6px;margin-top:1px;
+  background:var(--accent) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M20 6L9 17l-5-5'/></svg>") center/12px no-repeat}
+.checklist li.todo{color:var(--text-soft)}
+.checklist li.todo::before{background:#fff;border:2px solid var(--border-strong)}
+
+/* ---------- Tables ---------- */
+.table-wrap{border:2px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm)}
+table.data{width:100%;border-collapse:collapse;font-size:13px}
+table.data thead th{
+  text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--slate);
+  background:var(--bg);padding:11px 14px;border-bottom:2px solid var(--border);white-space:nowrap}
+table.data tbody td{padding:11px 14px;border-bottom:1px solid var(--border);color:var(--text)}
+table.data tbody tr:last-child td{border-bottom:none}
+table.data tbody tr:hover{background:var(--tint-4)}
+table.data.zebra tbody tr:nth-child(even){background:var(--bg)}
+table.data.zebra tbody tr:nth-child(even):hover{background:var(--tint-4)}
+table.data .num{text-align:right;font-variant-numeric:tabular-nums}
+
+/* ---------- Key–value metadata panel (e.g. patent overview header) ---------- */
+.meta-grid{display:grid;grid-template-columns:max-content 1fr;border:2px solid var(--border);
+  border-radius:var(--radius);overflow:hidden}
+.meta-grid > div{display:contents}
+.meta-grid dt{padding:10px 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--text-muted);background:var(--bg);border-bottom:1px solid var(--border)}
+.meta-grid dd{margin:0;padding:10px 14px;font-size:13px;color:var(--text);
+  border-bottom:1px solid var(--border);border-left:1px solid var(--border)}
+.meta-grid > div:last-child dt,.meta-grid > div:last-child dd{border-bottom:none}
+
+/* ---------- Badges & tags ---------- */
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;letter-spacing:.02em;
+  padding:3px 9px;border-radius:999px;border:1.5px solid var(--border-strong);background:var(--bg);
+  color:var(--text-soft);line-height:1.45;white-space:nowrap}
+.badge .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.badge.accent{color:var(--accent);background:var(--tint-4);border-color:var(--tint-1)}
+.badge.success{color:var(--success);background:var(--success-bg);border-color:color-mix(in srgb,var(--success) 35%,white)}
+.badge.warning{color:var(--warning);background:var(--warning-bg);border-color:color-mix(in srgb,var(--warning) 38%,white)}
+.badge.danger{color:var(--danger);background:var(--danger-bg);border-color:color-mix(in srgb,var(--danger) 32%,white)}
+.badge.info{color:var(--info);background:var(--info-bg);border-color:color-mix(in srgb,var(--info) 34%,white)}
+/* solid fill variant */
+.badge.solid{border-color:transparent;color:#fff}
+.badge.solid.neutral{background:var(--slate)}
+.badge.solid.accent{background:var(--accent)}
+.badge.solid.success{background:var(--success)}
+.badge.solid.warning{background:var(--warning)}
+.badge.solid.danger{background:var(--danger)}
+.badge.solid.info{background:var(--info)}
+
+/* ---------- Alerts / callouts ---------- */
+.alert{display:flex;gap:12px;align-items:flex-start;border:2px solid var(--border);border-radius:var(--radius-sm);
+  padding:13px 15px;background:var(--panel);font-size:13px;color:var(--text-soft);line-height:1.5}
+.alert .ico{flex:none;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  color:#fff;font-weight:700;font-size:13px;line-height:1;margin-top:1px}
+.alert .body b{display:block;color:var(--text);margin-bottom:2px}
+.alert.info{border-color:color-mix(in srgb,var(--info) 30%,white);background:var(--info-bg)}
+.alert.info .ico{background:var(--info)}
+.alert.success{border-color:color-mix(in srgb,var(--success) 32%,white);background:var(--success-bg)}
+.alert.success .ico{background:var(--success)}
+.alert.warning{border-color:color-mix(in srgb,var(--warning) 36%,white);background:var(--warning-bg)}
+.alert.warning .ico{background:var(--warning)}
+.alert.danger{border-color:color-mix(in srgb,var(--danger) 30%,white);background:var(--danger-bg)}
+.alert.danger .ico{background:var(--danger)}
+
+/* ---------- Content cards & stat tiles ---------- */
+.card{background:var(--panel);border:2px solid var(--border);border-radius:var(--radius);
+  box-shadow:var(--shadow-sm);overflow:hidden;display:flex;flex-direction:column}
+.card .card-media{height:104px;background:linear-gradient(135deg,var(--tint-2),var(--tint-4))}
+.card .card-body{padding:16px 18px}
+.card .card-body h3{margin:0 0 6px;font-size:15px;font-weight:600;color:var(--slate)}
+.card .card-body p{margin:0;font-size:13px;color:var(--text-soft);line-height:1.5}
+.card .card-foot{margin-top:auto;padding:12px 18px;border-top:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;gap:10px}
+.stat{background:var(--panel);border:2px solid var(--border);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow-sm)}
+.stat .k{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)}
+.stat .v{font-size:28px;font-weight:600;color:var(--slate);font-variant-numeric:tabular-nums;line-height:1.1;margin:6px 0 4px}
+.stat .delta{font-size:12px;font-weight:600}
+.stat .delta.up{color:var(--success)}
+.stat .delta.down{color:var(--danger)}
+
+/* ---------- Form controls (select, textarea, checkbox, radio) ---------- */
+.select{
+  width:100%;font-family:inherit;font-size:13px;color:var(--text);background-color:#fff;
+  border:2px solid var(--border);border-radius:8px;padding:8px 34px 8px 10px;outline:none;cursor:pointer;
+  -webkit-appearance:none;appearance:none;transition:.12s;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235B6770' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
+  background-repeat:no-repeat;background-position:right 10px center;background-size:15px}
+.select:focus{border-color:var(--tint-1)}
+textarea.text-in{resize:vertical;min-height:76px;line-height:1.5}
+.check{display:inline-flex;align-items:center;gap:9px;cursor:pointer;font-size:13px;color:var(--text);position:relative}
+.check input{position:absolute;opacity:0;width:0;height:0}
+.check .box{width:20px;height:20px;border:2px solid var(--border-strong);border-radius:6px;background:#fff;flex:none;
+  display:flex;align-items:center;justify-content:center;transition:.12s}
+.check .box.radio{border-radius:50%}
+.check input:checked + .box{background-color:var(--accent);border-color:var(--accent);
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M20 6L9 17l-5-5'/></svg>");
+  background-repeat:no-repeat;background-position:center;background-size:13px}
+.check input:checked + .box.radio{background-image:none}
+.check input:checked + .box.radio::after{content:"";width:8px;height:8px;border-radius:50%;background:#fff}
+.check input:focus-visible + .box{box-shadow:0 0 0 3px var(--tint-2)}
+
+/* ---------- Tabs ---------- */
+.tabs{display:flex;gap:2px;border-bottom:2px solid var(--border)}
+.tab{font-family:inherit;font-size:13px;font-weight:600;color:var(--text-soft);background:none;border:none;
+  padding:10px 14px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:.12s}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* ---------- Accordion (native details/summary) ---------- */
+.accordion{border:2px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--panel)}
+.accordion details{border-bottom:1px solid var(--border)}
+.accordion details:last-child{border-bottom:none}
+.accordion summary{list-style:none;cursor:pointer;padding:13px 16px;font-size:13px;font-weight:600;color:var(--text);
+  display:flex;align-items:center;justify-content:space-between;gap:10px}
+.accordion summary::-webkit-details-marker{display:none}
+.accordion summary::after{content:"";width:14px;height:14px;flex:none;transition:transform .2s;
+  background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23939DA7' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>") center/contain no-repeat}
+.accordion details[open] summary::after{transform:rotate(180deg)}
+.accordion summary:hover{background:var(--tint-4)}
+.accordion .acc-body{padding:0 16px 14px;font-size:13px;color:var(--text-soft);line-height:1.55}
+
+/* ---------- Progress / meter ---------- */
+.progress{height:8px;border-radius:999px;background:var(--g4);overflow:hidden}
+.progress > span{display:block;height:100%;border-radius:999px;background:var(--accent)}
+
+/* ---------- Breadcrumb ---------- */
+.breadcrumb{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-muted);flex-wrap:wrap}
+.breadcrumb a{color:var(--text-soft);text-decoration:none}
+.breadcrumb a:hover{color:var(--accent)}
+.breadcrumb .sep{color:var(--g3)}
+.breadcrumb .current{color:var(--text);font-weight:600}
+
+/* ---------- Pagination ---------- */
+.pagination{display:flex;gap:6px}
+.pagination .pg{min-width:34px;height:34px;padding:0 9px;border:2px solid var(--border);border-radius:9px;background:#fff;
+  font-size:13px;color:var(--text-soft);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+  font-variant-numeric:tabular-nums;transition:.12s}
+.pagination .pg:hover{border-color:var(--g3);background:var(--tint-4)}
+.pagination .pg.active{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* ---------- Presentation slide (16:9 deck frame) ---------- */
+.slide{aspect-ratio:16/9;width:100%;max-width:520px;background:var(--panel);border:2px solid var(--border);
+  border-radius:var(--radius);box-shadow:var(--shadow);padding:30px 34px;display:flex;flex-direction:column;
+  overflow:hidden;position:relative}
+.slide .accent-bar{position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--accent)}
+.slide .kicker{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:var(--accent)}
+.slide h2{font-size:23px;font-weight:600;color:var(--slate);margin:8px 0 12px;line-height:1.2}
+.slide p{margin:0 0 .6em;font-size:13.5px;color:var(--text-soft);line-height:1.55}
+.slide .slide-foot{margin-top:auto;display:flex;justify-content:space-between;align-items:center;
+  font-size:11px;color:var(--text-muted);border-top:1px solid var(--border);padding-top:12px}
+.slide.title{justify-content:center}
+.slide.title h2{font-size:28px;margin:6px 0 10px}
+
+/* ---------- Layout primitives ----------
+   Compose pages from these instead of bespoke flex/grid each time.
+   Override the gap per-instance with style="--gap:var(--sp-2)". */
+.container{max-width:var(--measure);margin-inline:auto;padding-inline:var(--sp-4)}
+.stack{display:flex;flex-direction:column;gap:var(--gap,var(--sp-4))}          /* vertical rhythm  */
+.cluster{display:flex;flex-wrap:wrap;align-items:center;gap:var(--gap,var(--sp-3))} /* wrapping row    */
+.spread{display:flex;align-items:center;justify-content:space-between;gap:var(--gap,var(--sp-3))} /* ends apart */
+.grid{display:grid;gap:var(--gap,var(--sp-4));                                  /* responsive grid  */
+  grid-template-columns:repeat(auto-fill,minmax(var(--col,220px),1fr))}         /* set --col=min width */
+
+/* ---------- Document sheet (print-ready report page) ---------- */
+.paper{background:#fff;border:2px solid var(--border);border-radius:var(--radius);
+  box-shadow:var(--shadow-sm);padding:40px 44px;max-width:720px;margin-inline:auto}
+.paper .doc-title{font-size:22px;font-weight:600;color:var(--slate);margin:0 0 4px}
+.paper .doc-sub{font-size:12px;color:var(--text-muted);margin:0 0 22px}
+.print-only{display:none}   /* shown only on paper (see @media print) */
+
+/* ============================================================
+   PRINT / PDF  —  reusable report stylesheet.
+   Mark screen-only chrome with .no-print; paper-only content with .print-only.
+   ============================================================ */
+@media print{
+  @page{margin:18mm 16mm}
+  html,body{background:#fff;color:#000}
+  body{font-size:11pt;line-height:1.5}
+  .no-print{display:none !important}
+  .print-only{display:revert !important}
+  /* flatten the floating look so it doesn't waste ink */
+  .panel,.card,.stat,.table-wrap,.meta-grid,.alert,.slide,.accordion,.paper{
+    box-shadow:none !important;border-color:#bbb !important}
+  .paper{border:none;padding:0;max-width:none}
+  a{color:#000;text-decoration:underline}
+  /* keep blocks whole across page breaks; repeat table headers on every page */
+  .card,.stat,.meta-grid,.alert,.slide,tr,blockquote,figure,.avoid-break{break-inside:avoid}
+  table.data thead{display:table-header-group}
+  h1,h2,h3,h4{break-after:avoid}
+  .badge{border-color:#999 !important}
+  /* — this guide's own chrome, so a print preview stays clean — */
+  .toc{display:none !important}
+  .src{background:#fff !important;color:#1f2937 !important;border:1px solid #ccc !important}
+  .src .c{color:#6b7785} .src .p{color:#1a7a5e}
+  .demo{box-shadow:none;border-color:#ccc}
+}
+
+/* ---------- Scrollbars ---------- */
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:var(--g3);border-radius:9px;border:2px solid #fff}
+::-webkit-scrollbar-thumb:hover{background:var(--g2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="guide-head">
+    <div class="eyebrow">3D Viewer · Design System</div>
+    <h1>Look &amp; Feel Style Guide</h1>
+    <p>A flat, light, paper-white interface built from rounded white panels, 2&nbsp;px borders, and pill-shaped controls, all driven by a single mint-green accent. Copy the token block, then lift the component rules you need — every example below ships with its exact CSS.</p>
+    <nav class="toc">
+      <a href="#principles">Principles</a>
+      <a href="#tokens">Tokens</a>
+      <a href="#color">Color</a>
+      <a href="#type">Typography</a>
+      <a href="#panels">Panels</a>
+      <a href="#buttons">Buttons</a>
+      <a href="#chips">Chips &amp; switches</a>
+      <a href="#inputs">Inputs &amp; sliders</a>
+      <a href="#lists">List rows</a>
+      <a href="#menu">Dark menu</a>
+      <a href="#floating">Floating &amp; labels</a>
+      <a href="#prose">Prose</a>
+      <a href="#lists-el">Lists</a>
+      <a href="#tables">Tables</a>
+      <a href="#meta">Metadata</a>
+      <a href="#badges">Badges</a>
+      <a href="#alerts">Alerts</a>
+      <a href="#cards">Cards &amp; stats</a>
+      <a href="#forms">Forms</a>
+      <a href="#disclosure">Tabs &amp; accordion</a>
+      <a href="#nav-el">Breadcrumb &amp; pagination</a>
+      <a href="#slides">Slides</a>
+      <a href="#layout">Layout &amp; spacing</a>
+      <a href="#print">Print / PDF</a>
+    </nav>
+  </header>
+
+  <!-- ============================================================ -->
+  <section class="doc" id="principles">
+    <h2><span class="n">01</span>Principles</h2>
+    <p class="lede">Six rules hold the whole system together. When in doubt, follow these rather than inventing a new pattern.</p>
+    <div class="principles">
+      <div class="principle"><h3>Flat &amp; light</h3><p>No gradients on surfaces, no heavy chrome. A near-white background (<code>--bg</code>) with pure-white panels. Depth comes from soft shadows, never from borders alone.</p></div>
+      <div class="principle"><h3>2&nbsp;px borders</h3><p>Almost every control and panel has a <b>2&nbsp;px solid</b> border in <code>--border</code>. It thickens or shifts to an accent tint on hover/active — the border is the primary state signal.</p></div>
+      <div class="principle"><h3>Rounded, pill-friendly</h3><p>Panels use <code>14px</code>, controls <code>10–12px</code>, and toggles/chips/floating bars go fully round (<code>999px</code>). Soft corners everywhere.</p></div>
+      <div class="principle"><h3>One accent, used sparingly</h3><p>Mint green (<code>--accent</code>) means "active / selected / focus." Soft tints carry hover and selection washes; the strong accent is reserved for the truly active element.</p></div>
+      <div class="principle"><h3>Quiet typography</h3><p>System UI font. Headers are tiny, bold, uppercase, letter-spaced. Body text is calm and low-contrast-grey. Numbers use tabular figures.</p></div>
+      <div class="principle"><h3>Calm motion</h3><p>Transitions are short (<code>.12s</code>) and easing is gentle. Press states nudge <code>translateY(1px)</code>. Nothing bounces or distracts from the model.</p></div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="doc" id="tokens">
+    <h2><span class="n">02</span>Design tokens</h2>
+    <p class="lede">The contract of the whole system. Paste this <code>:root</code> block into any stylesheet and the components below just work. To re-theme, edit only the four accent-palette variables at the top — the grey and tint scales recompute via <code>color-mix()</code>.</p>
+    <div class="src"><span class="c">/* Edit these four to re-theme everything */</span>
+<span class="p">--accent</span>:#389d86;        <span class="c">/* active / focus / links     */</span>
+<span class="p">--slate</span>:#495965;         <span class="c">/* primary buttons, headings  */</span>
+<span class="p">--gray</span>:#5B6770;          <span class="c">/* seed for the grey scale    */</span>
+<span class="p">--accent-light</span>:#59e8b1;  <span class="c">/* active borders, tints      */</span>
+
+<span class="c">/* Greys — tracks, hairlines, muted icons */</span>
+<span class="p">--g1</span>:color-mix(in srgb, var(--gray) 85%, white);
+<span class="p">--g2</span>:color-mix(in srgb, var(--gray) 62%, white);
+<span class="p">--g3</span>:color-mix(in srgb, var(--gray) 35%, white);
+<span class="p">--g4</span>:color-mix(in srgb, var(--gray) 17%, white);
+
+<span class="c">/* Tints — hover washes, selected rows */</span>
+<span class="p">--tint-1</span>:color-mix(in srgb, var(--accent-light) 55%, white);
+<span class="p">--tint-2</span>:color-mix(in srgb, var(--accent-light) 35%, white);
+<span class="p">--tint-3</span>:color-mix(in srgb, var(--accent-light) 18%, white);
+<span class="p">--tint-4</span>:color-mix(in srgb, var(--accent-light) 8%, white);
+
+<span class="c">/* Surfaces & text */</span>
+<span class="p">--bg</span>:#F9FAFA;   <span class="p">--panel</span>:#ffffff;
+<span class="p">--border</span>:#E1E3E7;   <span class="p">--border-strong</span>:#C2C7CD;
+<span class="p">--text</span>:#2b3238;   <span class="p">--text-soft</span>:#5B6770;   <span class="p">--text-muted</span>:#939DA7;
+
+<span class="c">/* Shape & depth */</span>
+<span class="p">--radius</span>:14px;   <span class="p">--radius-sm</span>:10px;
+<span class="p">--shadow</span>:0 6px 22px rgba(73,89,101,.12);
+<span class="p">--shadow-sm</span>:0 2px 8px rgba(73,89,101,.10);
+<span class="p">--font</span>:'Segoe UI',Roboto,Helvetica,Arial,system-ui,sans-serif;
+
+<span class="c">/* Status colors — badges, alerts, meters (each + a soft -bg) */</span>
+<span class="p">--success</span>:#2e8b6f;   <span class="p">--warning</span>:#b9822b;
+<span class="p">--danger</span>:#b0413e;    <span class="p">--info</span>:#3f6f9c;
+<span class="p">--success-bg</span>:color-mix(in srgb, var(--success) 10%, white);  <span class="c">/* …-bg per color */</span></div>
+    <div class="note"><b>Why <code>color-mix()</code>?</b> The grey and tint ladders are <i>derived</i>, not hand-picked. One accent change ripples through every hover wash and track automatically, so the palette never drifts out of sync.</div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="doc" id="color">
+    <h2><span class="n">03</span>Color</h2>
+    <p class="lede">The full resolved palette. Accents drive meaning; greys and tints do the quiet work of structure and state.</p>
+    <div class="swatches">
+      <div class="sw"><div class="chip-c" style="background:var(--accent)"></div><div class="meta"><div class="nm">accent</div><div class="hex">#389d86</div></div></div>
+      <div class="sw"><div class="chip-c" style="background:var(--accent-light)"></div><div class="meta"><div class="nm">accent-light</div><div class="hex">#59e8b1</div></div></div>
+      <div class="sw"><div class="chip-c" style="background:var(--slate)"></div><div class="meta"><div class="nm">slate</div><div class="hex">#495965</div></div></div>
+      <div class="sw"><div class="chip-c" style="background:var(--bg)"></div><div class="meta"><div class="nm">bg</div><div class="hex">#F9FAFA</div></div></div>
+      <div class="sw"><div class="chip-c" style="background:var(--border)"></div><div class="meta"><div class="nm">border</div><div class="hex">#E1E3E7</div></div></div>
+      <div class="sw"><div class="chip-c" style="background:var(--text)"></div><div class="meta"><div class="nm">text</div><div class="hex">#2b3238</div></div></div>
+      <div class="sw"><div class="chip-c" style="background:var(--text-soft)"></div><div class="meta"><div class="nm">text-soft</div><div class="hex">#5B6770</div></div></div>
+      <div class="sw"><div class="chip-c" style="background:var(--text-muted)"></div><div class="meta"><div class="nm">text-muted</div><div class="hex">#939DA7</div></div></div>
+      <div class="sw"><div class="chip-c" style="background:var(--tint-1)"></div><div class="meta"><div class="nm">tint-1</div><div class="hex">mix 55%</div></div></div>
+      <div class="sw"><div class="chip-c" style="background:var(--tint-3)"></div><div class="meta"><div class="nm">tint-3</div><div class="hex">mix 18%</div></div></div>
+      <div class="sw"><div class="chip-c" style="background:var(--g3)"></div><div class="meta"><div class="nm">g3</div><div class="hex">mix 35%</div></div></div>
+      <div class="sw"><div class="chip-c" style="background:#b0413e"></div><div class="meta"><div class="nm">danger</div><div class="hex">#b0413e</div></div></div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="doc" id="type">
+    <h2><span class="n">04</span>Typography</h2>
+    <p class="lede">One system font, a tight scale, and a strong distinction between tiny uppercase labels and calm grey body text.</p>
+    <div class="demo col">
+      <div class="type-row"><span class="spec">11px · 700 · UPPERCASE · .10em</span><span style="font-size:11px;font-weight:700;letter-spacing:.10em;text-transform:uppercase;color:var(--slate)">Section header</span></div>
+      <div class="type-row"><span class="spec">11px · 700 · UPPERCASE · muted</span><span class="field-label" style="margin:0">Field label</span></div>
+      <div class="type-row"><span class="spec">13px · 400 · text</span><span style="font-size:13px;color:var(--text)">Default body / list text</span></div>
+      <div class="type-row"><span class="spec">12.5px · 600 · text-soft</span><span style="font-size:12.5px;font-weight:600;color:var(--text-soft)">Control label</span></div>
+      <div class="type-row"><span class="spec">11px · muted · tabular</span><span style="font-size:11px;color:var(--text-muted);font-variant-numeric:tabular-nums">128.40 mm</span></div>
+      <div class="type-row"><span class="spec">19px · 600 · slate</span><span style="font-size:19px;font-weight:600;color:var(--slate)">Brand / title</span></div>
+    </div>
+    <div class="note">Headers are <b>small, bold, uppercase, and letter-spaced</b> — they read as quiet labels, not loud titles. Anything numeric uses <code>font-variant-numeric:tabular-nums</code> so digits don't jitter.</div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="doc" id="panels">
+    <h2><span class="n">05</span>Panels</h2>
+    <p class="lede">The base container: white surface, 2&nbsp;px border, <code>14px</code> radius, soft floating shadow. A panel head is a tiny uppercase label with an optional muted <code>.sub</code> on the right.</p>
+    <div class="demo">
+      <div class="panel" style="width:260px">
+        <div class="panel-head">Inspection <span class="sub">3 parts</span></div>
+        <div class="divider"></div>
+        <div style="padding:14px;font-size:13px;color:var(--text-soft)">Panel body content sits here, separated from the head by a hairline divider.</div>
+      </div>
+    </div>
+    <div class="src"><span class="p">.panel</span>{
+  background:var(--panel);
+  border:2px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+}
+<span class="p">.panel-head</span>{
+  font-size:11px;font-weight:700;letter-spacing:.10em;
+  text-transform:uppercase;color:var(--slate);padding:12px 14px 8px;
+}
+<span class="p">.panel-head .sub</span>{float:right;color:var(--text-muted);font-weight:600;text-transform:none}
+<span class="p">.divider</span>{height:1px;background:var(--border);margin:0 12px}</div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="doc" id="buttons">
+    <h2><span class="n">06</span>Buttons</h2>
+    <p class="lede">Default buttons are white with a 2&nbsp;px border; hover adds a faint tint wash, active swaps to the accent. The slate primary is the single high-emphasis action. Square <code>.vbtn</code> and round <code>.icon-btn</code> cover tool stacks.</p>
+    <div class="demo">
+      <button class="btn">Default</button>
+      <button class="btn active">Active</button>
+      <button class="btn-primary">Primary action</button>
+      <button class="btn pill">Pill button</button>
+      <button class="vbtn" title="Tool" aria-label="Tool">◧</button>
+      <button class="vbtn active" title="Tool" aria-label="Active tool">◨</button>
+      <button class="icon-btn" aria-label="Settings">⚙</button>
+      <button class="icon-btn round-solid" aria-label="Add">＋</button>
+    </div>
+    <div class="src"><span class="p">.btn</span>{
+  font-size:13px;color:var(--text-soft);background:var(--panel);
+  border:2px solid var(--border);border-radius:10px;padding:8px 14px;
+  cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:.12s ease;
+}
+<span class="p">.btn:hover</span>{border-color:var(--g3);background:var(--tint-4)}
+<span class="p">.btn:active</span>{transform:translateY(1px)}              <span class="c">/* subtle press */</span>
+<span class="p">.btn.active</span>{background:var(--tint-3);border-color:var(--accent-light);color:var(--accent)}
+
+<span class="p">.btn-primary</span>{
+  background:var(--slate);color:#fff;border-color:var(--slate);
+  font-weight:600;padding:9px 18px;box-shadow:var(--shadow-sm);
+}
+<span class="p">.btn-primary:hover</span>{background:#3c4953;border-color:#3c4953}
+<span class="p">.btn.pill</span>{border-radius:90px}                       <span class="c">/* fully round */</span>
+
+<span class="c">/* square 42x42 tool button · round icon button — same state rules */</span>
+<span class="p">.vbtn</span>{width:42px;height:42px;border-radius:12px;font-size:11px;font-weight:600;/* + .btn base */}
+<span class="p">.icon-btn</span>{width:42px;height:42px;border-radius:50%;/* + .btn base */}
+<span class="p">.icon-btn.round-solid</span>{background:var(--slate);border-color:var(--slate);color:#fff}</div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="doc" id="chips">
+    <h2><span class="n">07</span>Chips &amp; switches</h2>
+    <p class="lede">Pill chips are the workhorse for mutually-exclusive options (axes, modes, presets). The toggle switch is the on/off control — its track turns accent-green when on.</p>
+    <div class="demo">
+      <span class="chip">X</span>
+      <span class="chip active">Y</span>
+      <span class="chip">Z</span>
+      <span class="chip">Auto</span>
+      <div style="width:24px"></div>
+      <div class="toggle-row" style="border:2px solid var(--border);border-radius:10px;min-width:200px" onclick="this.querySelector('.switch').classList.toggle('on')">
+        <span class="t-label">Show shadows</span>
+        <span class="switch on"></span>
+      </div>
+      <div class="toggle-row" style="border:2px solid var(--border);border-radius:10px;min-width:200px" onclick="this.querySelector('.switch').classList.toggle('on')">
+        <span class="t-label">Wireframe</span>
+        <span class="switch"></span>
+      </div>
+    </div>
+    <div class="src"><span class="p">.chip</span>{
+  font-size:11px;font-weight:600;color:var(--text-soft);background:#fff;
+  border:2px solid var(--border);border-radius:999px;padding:4px 12px;cursor:pointer;
+}
+<span class="p">.chip:hover</span>{border-color:var(--tint-1);background:var(--tint-4)}
+<span class="p">.chip.active</span>{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+<span class="p">.switch</span>{width:38px;height:22px;border-radius:999px;background:var(--g3);position:relative;cursor:pointer;transition:.15s}
+<span class="p">.switch::after</span>{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;
+  border-radius:50%;background:#fff;transition:.15s;box-shadow:var(--shadow-sm)}
+<span class="p">.switch.on</span>{background:var(--accent)}
+<span class="p">.switch.on::after</span>{left:18px}</div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="doc" id="inputs">
+    <h2><span class="n">08</span>Inputs &amp; sliders</h2>
+    <p class="lede">Inputs are white with a 2&nbsp;px border that shifts to an accent tint on focus. The compact <code>.val-in</code> numeric field starts borderless-ish (faint <code>g4</code>) and firms up on hover/focus. Slider tracks are thin grey; the thumb is an accent dot.</p>
+    <div class="demo col">
+      <div style="max-width:280px">
+        <div class="field-label">Label</div>
+        <input class="text-in" value="Editable text field">
+      </div>
+      <div class="slider-row" style="max-width:340px">
+        <input type="range" min="0" max="100" value="62">
+        <span class="val">62 %</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="field-label" style="margin:0">X</span><input class="val-in" value="128.40">
+        <span class="field-label" style="margin:0">Y</span><input class="val-in" value="0.00">
+        <span class="field-label" style="margin:0">Z</span><input class="val-in" value="-45.10">
+      </div>
+    </div>
+    <div class="src"><span class="p">.text-in</span>{
+  width:100%;font-size:13px;color:var(--text);background:#fff;
+  border:2px solid var(--border);border-radius:8px;padding:6px 8px;outline:none;transition:.12s;
+}
+<span class="p">.text-in:focus</span>{border-color:var(--tint-1)}
+
+<span class="c">/* compact numeric field — quiet until touched */</span>
+<span class="p">.val-in</span>{font-size:14px;color:var(--text-soft);background:transparent;
+  border:2px solid var(--g4);border-radius:6px;padding:1px 6px;outline:none;font-variant-numeric:tabular-nums}
+<span class="p">.val-in:hover</span>{border-color:var(--g2)}
+<span class="p">.val-in:focus</span>{border-color:var(--accent)}
+
+<span class="c">/* slider — thin grey track, accent thumb (set per-browser) */</span>
+<span class="p">input[type=range]::-webkit-slider-runnable-track</span>{background:var(--g3);height:4px;border-radius:2px}
+<span class="p">input[type=range]::-webkit-slider-thumb</span>{-webkit-appearance:none;width:14px;height:14px;
+  border-radius:50%;background:var(--accent);margin-top:-5px;cursor:pointer}</div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="doc" id="lists">
+    <h2><span class="n">09</span>List rows</h2>
+    <p class="lede">Rows hover with a faint tint and, when selected, get a tint-3 fill plus an inset 2&nbsp;px ring. A small color swatch and ghost <code>.mini</code> action buttons round out the pattern.</p>
+    <div class="demo col">
+      <div class="panel" style="width:300px">
+        <div class="obj-list">
+          <div class="obj-row"><span class="swatch" style="background:#7aa6c2"></span><span class="oname">Bracket_left</span><button class="mini" aria-label="hide">◑</button></div>
+          <div class="obj-row selected"><span class="swatch" style="background:#c28f7a"></span><span class="oname">Housing_main</span><button class="mini" aria-label="hide">◑</button></div>
+          <div class="obj-row"><span class="swatch" style="background:#8fc27a"></span><span class="oname">Cover_plate_top</span><button class="mini" aria-label="hide">◑</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="src"><span class="p">.obj-row</span>{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:10px;cursor:pointer}
+<span class="p">.obj-row:hover</span>{background:var(--tint-4)}
+<span class="p">.obj-row.selected</span>{background:var(--tint-3);box-shadow:inset 0 0 0 2px var(--tint-1)}
+<span class="p">.obj-row .swatch</span>{width:18px;height:18px;border-radius:5px;border:2px solid #fff;box-shadow:0 0 0 1px var(--g3)}
+<span class="p">.obj-row .oname</span>{flex:1;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+<span class="c">/* ghost action button — invisible until row hover */</span>
+<span class="p">.obj-row .mini</span>{width:26px;height:26px;border-radius:8px;border:none;background:transparent;color:var(--g1)}
+<span class="p">.obj-row .mini:hover</span>{background:#fff;color:var(--accent);box-shadow:var(--shadow-sm)}</div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="doc" id="menu">
+    <h2><span class="n">10</span>Dark foldout menu</h2>
+    <p class="lede">The one place the system goes dark: a slate dropdown for app-level actions. Items have a two-line label/description, a left accent bar on hover, and a <code>.danger</code> variant in soft red.</p>
+    <div class="demo">
+      <div class="menu">
+        <div class="panel-head">Menu</div>
+        <div class="divider"></div>
+        <div class="menu-item"><span class="label">＋ Import model</span><span class="desc">Add an OBJ, STL, or GLB file</span></div>
+        <div class="menu-item"><span class="label">⤓ Save file</span><span class="desc">Write a new standalone viewer</span></div>
+        <div class="divider"></div>
+        <div class="menu-item danger"><span class="label">⌫ Clear scene</span><span class="desc">Remove all parts and markers</span></div>
+      </div>
+    </div>
+    <div class="src"><span class="p">.menu</span>{width:244px;background:#3e4a53;border-radius:14px;overflow:hidden;
+  box-shadow:0 14px 36px rgba(40,49,56,.40);color:#fff;padding-bottom:8px}
+<span class="p">.menu .panel-head</span>{color:#c7d0d6}
+<span class="p">.menu .divider</span>{background:rgba(255,255,255,.14)}
+<span class="p">.menu-item</span>{display:flex;flex-direction:column;gap:2px;padding:10px 16px;
+  cursor:pointer;border-left:3px solid transparent}
+<span class="p">.menu-item:hover</span>{background:rgba(255,255,255,.10);border-left-color:var(--accent-light)}
+<span class="p">.menu-item .label</span>{font-size:13.5px;font-weight:600;color:#fff;display:flex;align-items:center;gap:9px}
+<span class="p">.menu-item .desc</span>{font-size:11px;color:#c0c9d0;padding-left:24px}
+<span class="p">.menu-item.danger .label</span>{color:#f3aba7}</div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="doc" id="floating">
+    <h2><span class="n">11</span>Floating bars, badges &amp; labels</h2>
+    <p class="lede">Pill-shaped slate bars for transient hints, a bordered status badge, and the semi-transparent canvas labels (shown over a checker so the translucency reads). Plus the accent spinner.</p>
+    <div class="demo">
+      <span class="hint">Click two points to measure <kbd>Esc</kbd> to cancel</span>
+      <span class="confidential"><span class="dot"></span>Confidential</span>
+      <span class="spinner" role="status" aria-label="loading"></span>
+    </div>
+    <div class="label-demo">
+      <span class="floatlabel">Plain label</span>
+      <span class="floatlabel measure">128.40 mm</span>
+      <span class="floatlabel annot">Note: chamfer edge</span>
+    </div>
+    <div class="src"><span class="c">/* transient pill bar / keyboard hint */</span>
+<span class="p">.hint</span>{background:var(--slate);color:#fff;font-size:12.5px;font-weight:500;
+  padding:8px 16px;border-radius:999px;box-shadow:var(--shadow);display:inline-flex;align-items:center;gap:8px}
+<span class="p">.hint kbd</span>{background:rgba(255,255,255,.2);border-radius:5px;padding:1px 6px;font-size:11px}
+
+<span class="c">/* bordered status badge */</span>
+<span class="p">.confidential</span>{font-size:11.5px;font-weight:600;color:#b0413e;background:#fff;
+  border:2px solid #f0d6d4;padding:7px 12px;border-radius:999px;box-shadow:var(--shadow-sm)}
+<span class="p">.confidential .dot</span>{width:7px;height:7px;border-radius:50%;background:#cf5a55}
+
+<span class="c">/* floating canvas label — translucent white, tinted per kind */</span>
+<span class="p">.floatlabel</span>{font-size:12px;font-weight:600;color:var(--text);
+  background:rgba(255,255,255,.94);border:2px solid var(--border);
+  border-radius:9px;padding:4px 9px;box-shadow:var(--shadow-sm)}
+<span class="p">.floatlabel.measure</span>{color:var(--accent);border-color:var(--tint-1)}
+<span class="p">.floatlabel.annot</span>{color:var(--slate);border-color:var(--g3)}
+
+<span class="c">/* spinner */</span>
+<span class="p">.spinner</span>{width:30px;height:30px;border-radius:50%;
+  border:3px solid var(--g4);border-top-color:var(--accent);animation:spin 1s linear infinite}
+<span class="p">@keyframes spin</span>{to{transform:rotate(360deg)}}</div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="doc" id="prose">
+    <h2><span class="n">12</span>Headings &amp; prose</h2>
+    <p class="lede">Wrap any rich text — a patent abstract, a report section, slide notes — in <code>.prose</code> and headings, paragraphs, links, quotes, and inline code all inherit the system. One class makes raw HTML document-ready.</p>
+    <div class="demo col">
+      <div class="prose" style="max-width:660px">
+        <h1>Heading one</h1>
+        <p>Body copy sits in calm grey at a comfortable measure. Inline <a href="#prose">links</a> use the accent with a soft underline, and <strong>strong text</strong> lifts to full contrast. Reference a token like <code>--accent</code> inline.</p>
+        <h2>Heading two</h2>
+        <p>Sections break with generous spacing. Pull a key point out as a quote:</p>
+        <blockquote>The claimed apparatus comprises a housing, a sensor array, and a controller configured to actuate the array in response to a detected event.</blockquote>
+        <h3>Heading three</h3>
+        <p>Smaller sub-points carry on here in the same calm tone.</p>
+        <h4>Label-style heading four</h4>
+        <hr>
+        <p>A rule cleanly separates passages without needing a heading.</p>
+      </div>
+    </div>
+    <div class="src"><span class="p">.prose</span>{color:var(--text);line-height:1.6}
+<span class="p">.prose h1</span>{font-size:30px;font-weight:600;color:var(--slate)}
+<span class="p">.prose h2</span>{font-size:21px;font-weight:600;color:var(--slate);margin:1.5em 0 .45em}
+<span class="p">.prose h3</span>{font-size:16px;font-weight:700;color:var(--text)}
+<span class="p">.prose h4</span>{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted)}
+<span class="p">.prose a</span>{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--tint-1)}
+<span class="p">.prose code</span>{font-family:ui-monospace,Consolas,monospace;font-size:.88em;background:var(--bg);
+  border:1px solid var(--border);border-radius:5px;padding:1px 5px;color:var(--text-soft)}
+<span class="p">.prose blockquote</span>{padding:8px 16px;border-left:3px solid var(--accent-light);
+  background:var(--tint-4);color:var(--text-soft);border-radius:0 8px 8px 0}
+<span class="p">.prose hr</span>{border:none;border-top:2px solid var(--border);margin:1.7em 0}</div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="doc" id="lists-el">
+    <h2><span class="n">13</span>Lists</h2>
+    <p class="lede">Bulleted and numbered lists with accent markers, a <code>.kv</code> definition list for compact fact rows, and a <code>.checklist</code> for coverage / status.</p>
+    <div class="demo" style="align-items:flex-start">
+      <div class="prose" style="flex:1;min-width:180px">
+        <ul><li>Unordered item</li><li>Accent bullet markers</li><li>Calm row spacing</li></ul>
+        <ol><li>Ordered step</li><li>Tabular numerals</li><li>Third step</li></ol>
+      </div>
+      <dl class="kv" style="flex:1;min-width:180px">
+        <div><dt>Status</dt><dd>Granted</dd></div>
+        <div><dt>Jurisdiction</dt><dd>USPTO</dd></div>
+        <div><dt>Claims</dt><dd>18</dd></div>
+        <div><dt>Filed</dt><dd>2021</dd></div>
+      </dl>
+      <ul class="checklist" style="flex:1;min-width:180px">
+        <li>Prior-art search complete</li>
+        <li>Independent claims drafted</li>
+        <li>Figures finalized</li>
+        <li class="todo">Office-action response</li>
+      </ul>
+    </div>
+    <div class="src"><span class="p">.prose ul li::marker</span>{color:var(--accent)}
+<span class="p">.prose ol li::marker</span>{color:var(--text-muted);font-weight:700}
+
+<span class="c">/* compact key–value rows */</span>
+<span class="p">dl.kv div</span>{display:flex;gap:14px;padding:7px 0;border-bottom:1px solid var(--border)}
+<span class="p">dl.kv dt</span>{flex:none;width:120px;font-size:12px;font-weight:600;color:var(--text-muted)}
+<span class="p">dl.kv dd</span>{margin:0;font-size:13px;color:var(--text)}
+
+<span class="c">/* checklist — accent box w/ white tick, .todo = empty */</span>
+<span class="p">.checklist li</span>{display:flex;gap:10px;padding:5px 0;font-size:13px}
+<span class="p">.checklist li::before</span>{content:"";width:18px;height:18px;border-radius:6px;
+  background:var(--accent) url("data:…white-check…") center/12px no-repeat}
+<span class="p">.checklist li.todo::before</span>{background:#fff;border:2px solid var(--border-strong)}</div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="doc" id="tables">
+    <h2><span class="n">14</span>Tables</h2>
+    <p class="lede">Data tables for portfolio and patent overviews: tiny uppercase header on the grey wash, hairline row separators, hover highlight, optional <code>.zebra</code> striping, and right-aligned tabular numerics via <code>.num</code>. Wrap in <code>.table-wrap</code> for the rounded frame.</p>
+    <div class="demo col">
+      <div class="table-wrap">
+        <table class="data zebra">
+          <thead><tr><th>Patent no.</th><th>Title</th><th>Status</th><th class="num">Claims</th><th class="num">Filed</th></tr></thead>
+          <tbody>
+            <tr><td>US 10,123,456 B2</td><td>Sensor housing assembly</td><td><span class="badge success"><span class="dot"></span>Granted</span></td><td class="num">18</td><td class="num">2021</td></tr>
+            <tr><td>US 2023/0145678</td><td>Controller mount interface</td><td><span class="badge warning"><span class="dot"></span>Pending</span></td><td class="num">12</td><td class="num">2023</td></tr>
+            <tr><td>EP 3 456 789 A1</td><td>Sealed single-cable connector</td><td><span class="badge info"><span class="dot"></span>Filed</span></td><td class="num">9</td><td class="num">2022</td></tr>
+            <tr><td>US 9,987,654 B1</td><td>Legacy enclosure design</td><td><span class="badge danger"><span class="dot"></span>Lapsed</span></td><td class="num">21</td><td class="num">2016</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="src"><span class="p">.table-wrap</span>{border:2px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm)}
+<span class="p">table.data</span>{width:100%;border-collapse:collapse;font-size:13px}
+<span class="p">table.data thead th</span>{text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--slate);background:var(--bg);padding:11px 14px;border-bottom:2px solid var(--border)}
+<span class="p">table.data tbody td</span>{padding:11px 14px;border-bottom:1px solid var(--border)}
+<span class="p">table.data tbody tr:hover</span>{background:var(--tint-4)}
+<span class="p">table.data.zebra tbody tr:nth-child(even)</span>{background:var(--bg)}
+<span class="p">table.data .num</span>{text-align:right;font-variant-numeric:tabular-nums}</div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="doc" id="meta">
+    <h2><span class="n">15</span>Key–value metadata</h2>
+    <p class="lede">A two-column fact panel — ideal as the header of a patent overview, a part datasheet, or a spec sheet. Labels sit in a grey gutter; values align in their own column. Each row is a <code>&lt;div&gt;</code> wrapping a <code>dt</code>/<code>dd</code> pair.</p>
+    <div class="demo col">
+      <dl class="meta-grid" style="max-width:540px">
+        <div><dt>Patent no.</dt><dd>US 10,123,456 B2</dd></div>
+        <div><dt>Title</dt><dd>Sensor housing assembly with integrated controller</dd></div>
+        <div><dt>Inventors</dt><dd>A. Rivera, K. Doshi, M. Lindqvist</dd></div>
+        <div><dt>Assignee</dt><dd>Acme Instruments Ltd.</dd></div>
+        <div><dt>Filed</dt><dd>14 March 2021</dd></div>
+        <div><dt>Status</dt><dd><span class="badge success"><span class="dot"></span>Granted</span></dd></div>
+      </dl>
+    </div>
+    <div class="src"><span class="p">.meta-grid</span>{display:grid;grid-template-columns:max-content 1fr;
+  border:2px solid var(--border);border-radius:var(--radius);overflow:hidden}
+<span class="p">.meta-grid > div</span>{display:contents}   <span class="c">/* row wrapper just groups dt+dd */</span>
+<span class="p">.meta-grid dt</span>{padding:10px 14px;font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.05em;color:var(--text-muted);background:var(--bg);border-bottom:1px solid var(--border)}
+<span class="p">.meta-grid dd</span>{margin:0;padding:10px 14px;font-size:13px;color:var(--text);
+  border-bottom:1px solid var(--border);border-left:1px solid var(--border)}
+<span class="p">.meta-grid > div:last-child dt,.meta-grid > div:last-child dd</span>{border-bottom:none}</div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="doc" id="badges">
+    <h2><span class="n">16</span>Badges &amp; tags</h2>
+    <p class="lede">Compact status pills in six semantic colors — soft (tinted) or <code>.solid</code>. The status colors live in their own <code>--success / --warning / --danger / --info</code> tokens, so they re-theme independently of the brand accent.</p>
+    <div class="demo">
+      <span class="badge"><span class="dot"></span>Neutral</span>
+      <span class="badge accent"><span class="dot"></span>Accent</span>
+      <span class="badge success"><span class="dot"></span>Granted</span>
+      <span class="badge warning"><span class="dot"></span>Pending</span>
+      <span class="badge danger"><span class="dot"></span>Lapsed</span>
+      <span class="badge info"><span class="dot"></span>Filed</span>
+    </div>
+    <div class="demo">
+      <span class="badge solid neutral">Neutral</span>
+      <span class="badge solid accent">Accent</span>
+      <span class="badge solid success">Granted</span>
+      <span class="badge solid warning">Pending</span>
+      <span class="badge solid danger">Lapsed</span>
+      <span class="badge solid info">Filed</span>
+    </div>
+    <div class="src"><span class="p">.badge</span>{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;
+  padding:3px 9px;border-radius:999px;border:1.5px solid var(--border-strong);background:var(--bg);color:var(--text-soft)}
+<span class="p">.badge .dot</span>{width:6px;height:6px;border-radius:50%;background:currentColor}
+<span class="p">.badge.success</span>{color:var(--success);background:var(--success-bg);
+  border-color:color-mix(in srgb,var(--success) 35%,white)}   <span class="c">/* + warning / danger / info / accent */</span>
+<span class="p">.badge.solid</span>{border-color:transparent;color:#fff}
+<span class="p">.badge.solid.success</span>{background:var(--success)}             <span class="c">/* solid fill per color */</span></div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="doc" id="alerts">
+    <h2><span class="n">17</span>Alerts &amp; callouts</h2>
+    <p class="lede">Inline messages in four tones. A tinted background, a matching border, and a small solid icon disc carry the meaning.</p>
+    <div class="demo col">
+      <div class="alert info"><span class="ico">i</span><span class="body"><b>For your information</b>This overview reflects portfolio data as of the last sync.</span></div>
+      <div class="alert success"><span class="ico">&check;</span><span class="body"><b>All claims cleared</b>No conflicts were found in the prior-art search.</span></div>
+      <div class="alert warning"><span class="ico">!</span><span class="body"><b>Response due soon</b>An office-action response is due within 14 days.</span></div>
+      <div class="alert danger"><span class="ico">!</span><span class="body"><b>Maintenance fee lapsed</b>This patent has expired for non-payment of fees.</span></div>
+    </div>
+    <div class="src"><span class="p">.alert</span>{display:flex;gap:12px;align-items:flex-start;border:2px solid var(--border);
+  border-radius:var(--radius-sm);padding:13px 15px;background:var(--panel);font-size:13px;color:var(--text-soft)}
+<span class="p">.alert .ico</span>{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;color:#fff;font-weight:700;font-size:13px}
+<span class="p">.alert .body b</span>{display:block;color:var(--text);margin-bottom:2px}
+<span class="p">.alert.success</span>{border-color:color-mix(in srgb,var(--success) 32%,white);background:var(--success-bg)}
+<span class="p">.alert.success .ico</span>{background:var(--success)}   <span class="c">/* + info / warning / danger */</span></div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="doc" id="cards">
+    <h2><span class="n">18</span>Cards &amp; stat tiles</h2>
+    <p class="lede">Content cards (media / body / footer) for galleries and overviews, and KPI stat tiles with a big tabular figure and a coloured delta.</p>
+    <div class="demo">
+      <div class="demo-grid">
+        <div class="card">
+          <div class="card-media"></div>
+          <div class="card-body"><h3>Sensor housing</h3><p>Injection-moulded enclosure with an integrated controller mount.</p></div>
+          <div class="card-foot"><span class="badge success"><span class="dot"></span>Granted</span><button class="btn">Open</button></div>
+        </div>
+        <div class="stat"><div class="k">Active patents</div><div class="v">128</div><div class="delta up">&#9650; 6 this quarter</div></div>
+        <div class="stat"><div class="k">Pending</div><div class="v">37</div><div class="delta down">&#9660; 2 this quarter</div></div>
+      </div>
+    </div>
+    <div class="src"><span class="p">.card</span>{background:var(--panel);border:2px solid var(--border);border-radius:var(--radius);
+  box-shadow:var(--shadow-sm);overflow:hidden;display:flex;flex-direction:column}
+<span class="p">.card .card-media</span>{height:104px;background:linear-gradient(135deg,var(--tint-2),var(--tint-4))}
+<span class="p">.card .card-foot</span>{margin-top:auto;padding:12px 18px;border-top:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between}
+<span class="p">.stat .k</span>{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)}
+<span class="p">.stat .v</span>{font-size:28px;font-weight:600;color:var(--slate);font-variant-numeric:tabular-nums}
+<span class="p">.stat .delta.up</span>{color:var(--success)}  <span class="p">.stat .delta.down</span>{color:var(--danger)}</div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="doc" id="forms">
+    <h2><span class="n">19</span>Form controls</h2>
+    <p class="lede">Select, textarea, and custom checkbox / radio that match the input styling from Section&nbsp;08 — 2&nbsp;px borders, accent focus, accent-filled checks with a white tick.</p>
+    <div class="demo col">
+      <div style="max-width:300px">
+        <div class="field-label">Jurisdiction</div>
+        <select class="select"><option>United States (USPTO)</option><option>European Patent Office</option><option>Japan (JPO)</option></select>
+      </div>
+      <div style="max-width:300px">
+        <div class="field-label">Notes</div>
+        <textarea class="text-in" rows="3">Editable multi-line notes…</textarea>
+      </div>
+      <div style="display:flex;gap:20px;flex-wrap:wrap">
+        <label class="check"><input type="checkbox" checked><span class="box"></span>Granted</label>
+        <label class="check"><input type="checkbox"><span class="box"></span>Pending</label>
+        <label class="check"><input type="checkbox" checked><span class="box"></span>Active fees</label>
+      </div>
+      <div style="display:flex;gap:20px;flex-wrap:wrap">
+        <label class="check"><input type="radio" name="view" checked><span class="box radio"></span>List view</label>
+        <label class="check"><input type="radio" name="view"><span class="box radio"></span>Grid view</label>
+        <label class="check"><input type="radio" name="view"><span class="box radio"></span>Timeline</label>
+      </div>
+    </div>
+    <div class="src"><span class="c">/* native select with a custom chevron */</span>
+<span class="p">.select</span>{width:100%;font-size:13px;border:2px solid var(--border);border-radius:8px;
+  padding:8px 34px 8px 10px;appearance:none;cursor:pointer;
+  background:#fff url("data:…chevron…") no-repeat right 10px center/15px}
+<span class="p">.select:focus</span>{border-color:var(--tint-1)}
+
+<span class="c">/* custom checkbox / radio — hide input, style the .box */</span>
+<span class="p">.check input</span>{position:absolute;opacity:0;width:0;height:0}
+<span class="p">.check .box</span>{width:20px;height:20px;border:2px solid var(--border-strong);border-radius:6px;background:#fff}
+<span class="p">.check .box.radio</span>{border-radius:50%}
+<span class="p">.check input:checked + .box</span>{background:var(--accent) url("data:…white-tick…") center/13px no-repeat;border-color:var(--accent)}
+<span class="p">.check input:focus-visible + .box</span>{box-shadow:0 0 0 3px var(--tint-2)}</div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="doc" id="disclosure">
+    <h2><span class="n">20</span>Tabs &amp; accordion</h2>
+    <p class="lede">Two ways to fold content for overviews and detail pages: an underline tab strip, and a native <code>&lt;details&gt;</code> accordion with an animated chevron.</p>
+    <div class="demo col">
+      <div class="tabs">
+        <button class="tab active">Overview</button>
+        <button class="tab">Claims</button>
+        <button class="tab">History</button>
+        <button class="tab">Citations</button>
+      </div>
+      <div class="accordion" style="max-width:540px">
+        <details open><summary>Abstract</summary><div class="acc-body">A housing assembly comprising a sensor array and a controller configured to actuate the array.</div></details>
+        <details><summary>Independent claims</summary><div class="acc-body">1. An apparatus comprising a housing; a sensor array disposed within the housing; and a controller…</div></details>
+        <details><summary>Prosecution history</summary><div class="acc-body">Filed March 2021. First office action November 2022. Granted June 2023.</div></details>
+      </div>
+    </div>
+    <div class="src"><span class="p">.tabs</span>{display:flex;gap:2px;border-bottom:2px solid var(--border)}
+<span class="p">.tab</span>{font-size:13px;font-weight:600;color:var(--text-soft);background:none;border:none;
+  padding:10px 14px;border-bottom:2px solid transparent;margin-bottom:-2px;cursor:pointer}
+<span class="p">.tab.active</span>{color:var(--accent);border-bottom-color:var(--accent)}
+
+<span class="p">.accordion summary</span>{list-style:none;cursor:pointer;padding:13px 16px;font-size:13px;font-weight:600;
+  display:flex;align-items:center;justify-content:space-between}
+<span class="p">.accordion summary::after</span>{content:"";width:14px;height:14px;
+  background:url("data:…chevron…") center/contain no-repeat;transition:transform .2s}
+<span class="p">.accordion details[open] summary::after</span>{transform:rotate(180deg)}</div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="doc" id="nav-el">
+    <h2><span class="n">21</span>Breadcrumb, pagination &amp; progress</h2>
+    <p class="lede">Wayfinding and progress pieces for list and table views.</p>
+    <div class="demo col">
+      <nav class="breadcrumb"><a href="#nav-el">Portfolio</a><span class="sep">/</span><a href="#nav-el">Sensors</a><span class="sep">/</span><span class="current">US 10,123,456</span></nav>
+      <div class="pagination"><span class="pg">&lsaquo;</span><span class="pg active">1</span><span class="pg">2</span><span class="pg">3</span><span class="pg">…</span><span class="pg">9</span><span class="pg">&rsaquo;</span></div>
+      <div style="max-width:380px">
+        <div class="field-label">Portfolio reviewed — 68%</div>
+        <div class="progress"><span style="width:68%"></span></div>
+      </div>
+    </div>
+    <div class="src"><span class="p">.breadcrumb</span>{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-muted)}
+<span class="p">.breadcrumb a</span>{color:var(--text-soft);text-decoration:none}  <span class="p">.breadcrumb .current</span>{color:var(--text);font-weight:600}
+
+<span class="p">.pagination .pg</span>{min-width:34px;height:34px;border:2px solid var(--border);border-radius:9px;background:#fff;
+  font-size:13px;color:var(--text-soft);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+<span class="p">.pagination .pg.active</span>{background:var(--accent);border-color:var(--accent);color:#fff}
+
+<span class="p">.progress</span>{height:8px;border-radius:999px;background:var(--g4);overflow:hidden}
+<span class="p">.progress > span</span>{display:block;height:100%;border-radius:999px;background:var(--accent)}</div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="doc" id="slides">
+    <h2><span class="n">22</span>Presentation slides</h2>
+    <p class="lede">A 16:9 slide frame for decks built straight in HTML — a title slide and a content slide, both on the same paper-white surface with an accent spine. Drop several <code>.slide</code> blocks in a column for a deck.</p>
+    <div class="demo">
+      <div class="slide title">
+        <span class="accent-bar"></span>
+        <span class="kicker">Patent overview</span>
+        <h2>Sensor housing assembly</h2>
+        <p>US 10,123,456 B2 · Granted 2023</p>
+        <div class="slide-foot"><span>Confidential</span><span>01 / 12</span></div>
+      </div>
+      <div class="slide">
+        <span class="accent-bar"></span>
+        <span class="kicker">Key claims</span>
+        <h2>What is protected</h2>
+        <p>• Integrated controller mount within the housing</p>
+        <p>• Sealed sensor array with a single-cable interface</p>
+        <div class="slide-foot"><span>Confidential</span><span>04 / 12</span></div>
+      </div>
+    </div>
+    <div class="src"><span class="p">.slide</span>{aspect-ratio:16/9;max-width:520px;background:var(--panel);border:2px solid var(--border);
+  border-radius:var(--radius);box-shadow:var(--shadow);padding:30px 34px;
+  display:flex;flex-direction:column;overflow:hidden;position:relative}
+<span class="p">.slide .accent-bar</span>{position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--accent)}
+<span class="p">.slide .kicker</span>{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:var(--accent)}
+<span class="p">.slide h2</span>{font-size:23px;font-weight:600;color:var(--slate)}
+<span class="p">.slide .slide-foot</span>{margin-top:auto;display:flex;justify-content:space-between;
+  font-size:11px;color:var(--text-muted);border-top:1px solid var(--border);padding-top:12px}</div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="doc" id="layout">
+    <h2><span class="n">23</span>Layout &amp; spacing</h2>
+    <p class="lede">Foundational, like the tokens. Spacing runs on a <b>4&nbsp;px scale</b> (<code>--sp-1</code>…<code>--sp-8</code>) that every component rounds to — lay pages out with the same steps. Four primitives cover almost all composition; set <code>--gap</code> (and <code>--col</code> for grids) per instance to tune them.</p>
+
+    <h3 style="font-size:13px;color:var(--slate);margin:22px 0 8px;letter-spacing:.04em">Spacing scale</h3>
+    <div class="demo col">
+      <div class="stack" style="--gap:var(--sp-2);width:100%">
+        <div class="space-row"><span class="nm">--sp-1</span><span class="bar" style="width:var(--sp-1)"></span><span class="px">4px</span></div>
+        <div class="space-row"><span class="nm">--sp-2</span><span class="bar" style="width:var(--sp-2)"></span><span class="px">8px</span></div>
+        <div class="space-row"><span class="nm">--sp-3</span><span class="bar" style="width:var(--sp-3)"></span><span class="px">12px</span></div>
+        <div class="space-row"><span class="nm">--sp-4</span><span class="bar" style="width:var(--sp-4)"></span><span class="px">16px · default gap</span></div>
+        <div class="space-row"><span class="nm">--sp-5</span><span class="bar" style="width:var(--sp-5)"></span><span class="px">24px</span></div>
+        <div class="space-row"><span class="nm">--sp-6</span><span class="bar" style="width:var(--sp-6)"></span><span class="px">32px</span></div>
+        <div class="space-row"><span class="nm">--sp-7</span><span class="bar" style="width:var(--sp-7)"></span><span class="px">48px</span></div>
+        <div class="space-row"><span class="nm">--sp-8</span><span class="bar" style="width:var(--sp-8)"></span><span class="px">64px</span></div>
+      </div>
+    </div>
+
+    <h3 style="font-size:13px;color:var(--slate);margin:26px 0 8px;letter-spacing:.04em">Primitives</h3>
+    <div class="demo col">
+      <div>
+        <div class="field-label">.stack — vertical rhythm (here <code>--gap:var(--sp-2)</code>)</div>
+        <div class="stack" style="--gap:var(--sp-2);max-width:300px">
+          <span class="lbox">Item</span><span class="lbox">Item</span><span class="lbox">Item</span>
+        </div>
+      </div>
+      <div>
+        <div class="field-label">.cluster — wrapping row of chips / buttons</div>
+        <div class="cluster"><span class="lbox">One</span><span class="lbox">Two</span><span class="lbox">Three</span><span class="lbox">Four</span><span class="lbox">Five</span></div>
+      </div>
+      <div>
+        <div class="field-label">.spread — pinned to both ends (toolbars, footers)</div>
+        <div class="spread" style="border:2px solid var(--border);border-radius:10px;padding:10px 14px"><span class="lbox">Title</span><button class="btn">Action</button></div>
+      </div>
+      <div style="width:100%">
+        <div class="field-label">.grid — responsive auto-fill (here <code>--col:110px</code>)</div>
+        <div class="grid" style="--col:110px;width:100%">
+          <span class="lbox">1</span><span class="lbox">2</span><span class="lbox">3</span><span class="lbox">4</span><span class="lbox">5</span><span class="lbox">6</span>
+        </div>
+      </div>
+    </div>
+    <div class="src"><span class="c">/* 4px spacing scale */</span>
+<span class="p">--sp-1</span>:4px; <span class="p">--sp-2</span>:8px; <span class="p">--sp-3</span>:12px; <span class="p">--sp-4</span>:16px;
+<span class="p">--sp-5</span>:24px; <span class="p">--sp-6</span>:32px; <span class="p">--sp-7</span>:48px; <span class="p">--sp-8</span>:64px;
+
+<span class="c">/* primitives — override gap/col per instance via style="--gap: …; --col: …" */</span>
+<span class="p">.container</span>{max-width:var(--measure);margin-inline:auto;padding-inline:var(--sp-4)}
+<span class="p">.stack</span>{display:flex;flex-direction:column;gap:var(--gap,var(--sp-4))}
+<span class="p">.cluster</span>{display:flex;flex-wrap:wrap;align-items:center;gap:var(--gap,var(--sp-3))}
+<span class="p">.spread</span>{display:flex;align-items:center;justify-content:space-between;gap:var(--gap,var(--sp-3))}
+<span class="p">.grid</span>{display:grid;gap:var(--gap,var(--sp-4));
+  grid-template-columns:repeat(auto-fill,minmax(var(--col,220px),1fr))}</div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="doc" id="print">
+    <h2><span class="n">24</span>Print / PDF</h2>
+    <p class="lede">A reusable <code>@media print</code> stylesheet aimed at patent overviews and reports: drop the app chrome, flatten shadows to save ink, keep cards/rows/tables from splitting across pages, and repeat table headers. Mark screen-only chrome <code>.no-print</code> and paper-only content <code>.print-only</code>. The <code>.paper</code> sheet below is a print-ready report page.</p>
+    <div class="demo col">
+      <div class="paper">
+        <div class="cluster no-print" style="margin-bottom:14px">
+          <span class="badge warning"><span class="dot"></span>Screen only · .no-print</span>
+        </div>
+        <h1 class="doc-title">Patent overview — US&nbsp;10,123,456&nbsp;B2</h1>
+        <p class="doc-sub">Sensor housing assembly · generated 23 Jun 2026</p>
+        <dl class="meta-grid" style="margin-bottom:20px">
+          <div><dt>Inventors</dt><dd>A. Rivera, K. Doshi, M. Lindqvist</dd></div>
+          <div><dt>Assignee</dt><dd>Acme Instruments Ltd.</dd></div>
+          <div><dt>Status</dt><dd><span class="badge success"><span class="dot"></span>Granted</span></dd></div>
+        </dl>
+        <div class="prose">
+          <p>A housing assembly comprising a sensor array disposed within the housing and a controller configured to actuate the array in response to a detected event, the controller being mounted on an integrated boss within the enclosure.</p>
+        </div>
+        <div class="table-wrap" style="margin-top:8px">
+          <table class="data"><thead><tr><th>Claim</th><th>Type</th><th class="num">Words</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>Independent</td><td class="num">142</td></tr>
+            <tr><td>2</td><td>Dependent</td><td class="num">38</td></tr>
+          </tbody></table>
+        </div>
+        <p class="print-only" style="margin-top:18px;color:#666;font-size:11px">Confidential — internal use only</p>
+      </div>
+      <div class="cluster">
+        <button class="btn-primary no-print" onclick="window.print()">Print preview…</button>
+        <span style="font-size:12.5px;color:var(--text-muted)">…or press <b>Ctrl / Cmd + P</b> to watch the rules apply (chrome drops, shadows flatten, the badge ribbon disappears, the confidential line appears).</span>
+      </div>
+    </div>
+    <div class="src"><span class="p">.print-only</span>{display:none}            <span class="c">/* hidden on screen */</span>
+
+<span class="p">@media print</span>{
+  <span class="p">@page</span>{margin:18mm 16mm}
+  html,body{background:#fff;color:#000}
+  body{font-size:11pt;line-height:1.5}
+  <span class="p">.no-print</span>{display:none !important}
+  <span class="p">.print-only</span>{display:revert !important}
+  <span class="c">/* flatten the floating look — ink-friendly */</span>
+  .panel,.card,.stat,.table-wrap,.meta-grid,.alert,.paper{box-shadow:none !important;border-color:#bbb !important}
+  a{color:#000;text-decoration:underline}
+  <span class="c">/* keep blocks whole; repeat table headers across pages */</span>
+  .card,.stat,.meta-grid,.alert,tr,blockquote,.avoid-break{break-inside:avoid}
+  table.data thead{display:table-header-group}
+  h1,h2,h3,h4{break-after:avoid}
+}</div>
+    <div class="note"><b>Tip —</b> for a true one-component-per-page report, wrap each section in an element with <code>.avoid-break</code> (or add <code>break-before:page</code> where you want a hard page break). The same rules drive browser <i>Save as PDF</i>.</div>
+  </section>
+
+  <div class="note" style="margin-top:60px">
+    <b>Reuse checklist —</b> (1) paste the <code>:root</code> token block · (2) set <code>body</code> to <code>background:var(--bg); color:var(--text); font-family:var(--font)</code> · (3) lift the component rules you need · (4) keep new elements on the same grammar: white surface, 2&nbsp;px border, soft radius, accent only for the active state.
+  </div>
+
+</div>
+</body>
+</html>
