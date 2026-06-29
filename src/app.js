@@ -1847,7 +1847,7 @@ const LIGHT_PRESETS = {
   studio:     { key:0.65, casterShare:0.18, fill:0.55, rim:0.28, az:35, el:47, exposure:1.0,  tonemap:"neutral", bg:"#F9FAFA", keyColor:0xffffff, rimColor:0xffffff, hemiSky:0xffffff, hemiGround:0x333333 },
   threePoint: { key:0.95, casterShare:0.20, fill:0.30, rim:0.55, az:40, el:35, exposure:1.0,  tonemap:"neutral", bg:"#F9FAFA", keyColor:0xffffff, rimColor:0xffffff, hemiSky:0xffffff, hemiGround:0x222222 },
   soft:       { key:0.35, casterShare:0.08, fill:0.90, rim:0.12, az:25, el:55, exposure:1.05, tonemap:"neutral", bg:"#F9FAFA", keyColor:0xffffff, rimColor:0xffffff, hemiSky:0xffffff, hemiGround:0x555555 },
-  dramatic:   { key:1.25, casterShare:0.45, fill:0.33, rim:0.35, az:55, el:28, exposure:1.06,  tonemap:"neutral", bg:"#F9FAFA", keyColor:0xffffff, rimColor:0xbfd4ff, hemiSky:0x445066, hemiGround:0x111111 },
+  dramatic:   { key:1.25, casterShare:0.45, fill:0.33, rim:0.35, az:55, el:28, exposure:1.06,  tonemap:"neutral", bg:"#F9FAFA", keyColor:0xffffff, rimColor:0xD9DFE5, hemiSky:0x515459, hemiGround:0x111111 },
   top:        { key:0.85, casterShare:0.25, fill:0.40, rim:0.15, az:20, el:82, exposure:1.0,  tonemap:"neutral",    bg:"#F9FAFA", keyColor:0xffffff, rimColor:0xffffff, hemiSky:0xffffff, hemiGround:0x333333 },
   coolShop:   { key:0.85, casterShare:0.22, fill:0.50, rim:0.40, az:50, el:40, exposure:1.0,  tonemap:"neutral",    bg:"#F9FAFA", keyColor:0xfff1dc, rimColor:0xcfe3ff, hemiSky:0xcfe3ff, hemiGround:0x1d2530 },
   // warm/cool stylised rigs (in the Cool shop / Dramatic family) — Neutral tone mapping keeps the tints vivid
