@@ -470,7 +470,11 @@ body.editing .info-edit-actions{display:flex}
 .part-coords .cc.cc-wide{flex:1}
 
 /* ===== LIGHT LAB (DEVELOPER — lighting / material explorer; stripped from the build when DEV.lightPanel is false) ===== */
-.lightlab{flex:0 0 auto;overflow-y:auto}
+/* Tall panel: let it shrink to the column's height and scroll its own body
+   (the .panel.collapsible overflow:hidden above otherwise clips it and it
+   overruns the viewport). .panel.lightlab outscopes that rule on the y axis. */
+.panel.lightlab{flex:0 1 auto;overflow-x:hidden;overflow-y:auto}
+.lightlab > .panel-head{position:sticky;top:0;z-index:2;background:var(--panel)}
 .lightlab .tool-group{padding:10px 14px}
 .ll-slider{display:flex;align-items:center;gap:10px;margin-top:9px}
 .ll-slider .ll-lbl{width:58px;flex:none;font-size:11px;font-weight:600;color:var(--text-soft)}
@@ -486,6 +490,16 @@ body.editing .info-edit-actions{display:flex}
 }
 .ll-slider input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--accent);border:none;cursor:pointer}
 .lightlab .chip{font-size:10.5px;padding:4px 10px;margin-bottom:3px}
+.ll-colors{display:flex;gap:8px;margin-top:9px}
+.ll-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;margin:0}
+.ll-col span{font-size:10px;font-weight:600;color:var(--text-soft)}
+.ll-col input[type=color]{
+  width:100%;height:24px;padding:0;border:1px solid var(--border);border-radius:6px;
+  background:var(--bg);cursor:pointer;color-scheme:light;
+}
+.ll-col input[type=color]::-webkit-color-swatch-wrapper{padding:2px}
+.ll-col input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
+.ll-col input[type=color]::-moz-color-swatch{border:none;border-radius:4px}
 .ll-readout{
   font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;line-height:1.55;
   color:var(--text-soft);background:var(--bg);border:1px solid var(--border);border-radius:8px;

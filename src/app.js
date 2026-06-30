@@ -30,10 +30,13 @@ const BRAND = {
                  "studio" | "threePoint" | "soft" | "dramatic" | "top" |
                  "coolShop" | "sunset" | "moonlight" | "blueprint" | "ember".
                  (Tune values live with the panel, then bake the winner here.)
+   env           Boot with the procedural studio environment on (image-based
+                 reflections). Needed for the Metal slider to read as metal.
 ---------------------------------------------------------------------------- */
 const DEV = {
   lightPanel:  true,
   lightPreset: "dramatic",
+  env:         false,
 };
 
 const NEUTRAL_COLOR = 0x9099A2;      // default shaded part color (mid neutral grey)
@@ -43,7 +46,7 @@ const BG_COLOR      = 0xF9FAFA;
 const CLAY_COLOR    = 0xc3c7cc;      // LIGHT LAB: uniform "clay" override colour
 /* LIGHT LAB (temporary): current material knobs, read by makePartMaterial so parts
    loaded while the panel is active inherit the explored look. */
-const MAT = { roughness: 0.6, metalness: 0.0, flat: false };
+const MAT = { roughness: 0.6, metalness: 0.0, flat: false, envIntensity: 1.0 };
 const $  = (id) => document.getElementById(id);
 const AXES = {
   x: new THREE.Vector3(1, 0, 0),
@@ -398,6 +401,7 @@ function makePartMaterial(colorHex) {
   return new THREE.MeshStandardMaterial({
     color: new THREE.Color(colorHex),
     roughness: MAT.roughness, metalness: MAT.metalness,   // LIGHT LAB-driven; defaults give a little specular so dark parts catch light
+    envMapIntensity: MAT.envIntensity,                    // LIGHT LAB-driven; only visible when scene.environment is set (Environment toggle)
     side: THREE.DoubleSide,
     flatShading: MAT.flat,
   });
@@ -1549,6 +1553,23 @@ function setupCollapsiblePanels() {
   });
 }
 
+/* Persisted panel state: a saved file reopens with whatever expand/collapse state
+   the panels were in when it was saved (WYSIWYG). Keyed by data-panel; absent in
+   older saves -> panels keep their markup default (collapsed). */
+function capturePanelStates() {
+  const out = {};
+  document.querySelectorAll(".panel.collapsible[data-panel]").forEach((p) => {
+    out[p.dataset.panel] = p.classList.contains("collapsed");
+  });
+  return out;
+}
+function applyPanelStates(map) {
+  if (!map) return;
+  document.querySelectorAll(".panel.collapsible[data-panel]").forEach((p) => {
+    if (p.dataset.panel in map) p.classList.toggle("collapsed", !!map[p.dataset.panel]);
+  });
+}
+
 /* ----------------------------------------------------------------------------
    Info panel
 ---------------------------------------------------------------------------- */
@@ -1576,7 +1597,7 @@ function refreshInfoPanel() {
 function serializeState() {
   return {
     v: 1,
-    meta: Object.assign({}, state.meta),
+    meta: Object.assign({}, state.meta, { panels: capturePanelStates() }),
     files: state.files.map((f) => ({ id: f.id, name: f.name, format: f.format, enc: f.enc, data: f.data })),
     parts: state.parts.map((p) => {
       const o = { fileId: p.fileId, index: p.index, name: p.name, color: p.color, visible: p.visible };
@@ -1692,6 +1713,7 @@ function finishLoad() {
   rebuildObjectsPanel();
   updateXformResetUI();   // surfaces reset controls if any saved part has a transform
   refreshInfoPanel();
+  applyPanelStates(state.meta.panels);   // restore each panel's saved expand/collapse state
   setProjection(state.meta.projection || "persp");
   setGrid(!!state.meta.gridOn);
   setView("iso");
@@ -1807,11 +1829,14 @@ function toggleRow(name, handler) {
    registerObject(), the `.lightlab` panel in index.html and its CSS.
    ========================================================================== */
 const LIGHT_LAB = {
-  key: 0.6, casterShare: 0.18, fill: 0.55, exposure: 1.0,
+  key: 0.6, casterShare: 0.18, fill: 0.55, rim: 0.28, exposure: 1.0,
   az: 35, el: 47, tonemap: "none", bg: "#F9FAFA",
+  keyColor: 0xffffff, rimColor: 0xffffff, hemiSky: 0xffffff, hemiGround: 0x333333,
   headlight: false, shadows: true, ground: false, spin: false,
+  env: false, envIntensity: 1.0,
   rough: 0.6, metal: 0.0, flat: false, clay: false, edges: false,
 };
+const studioEnv = { tex: null };   // LIGHT LAB: cached PMREM env texture (built lazily by ensureStudioEnv)
 let groundCatcher = null;   // LIGHT LAB: ShadowMaterial floor plane that catches the cast shadow
 const FILL_BASE = new THREE.Vector3(-1.1, 0.4, -0.6);   // LIGHT LAB: rest directions of the fill / rim lights
 const RIM_BASE  = new THREE.Vector3(0.2, -0.9, -0.8);   //   (orbited around origin by "Rotate lights")
@@ -1889,6 +1914,10 @@ function applyFillIntensity() {
   hemiLight.intensity = LIGHT_LAB.fill;
   ambLight.intensity  = LIGHT_LAB.fill * 0.35;
 }
+function applyRim()       { if (rimLight) rimLight.intensity = LIGHT_LAB.rim; }
+function applyKeyColor()  { if (keyLight)  { keyLight.color.setHex(LIGHT_LAB.keyColor); keyMainLight.color.setHex(LIGHT_LAB.keyColor); } }
+function applyRimColor()  { if (rimLight)  rimLight.color.setHex(LIGHT_LAB.rimColor); }
+function applyHemiColors(){ if (hemiLight) { hemiLight.color.setHex(LIGHT_LAB.hemiSky); hemiLight.groundColor.setHex(LIGHT_LAB.hemiGround); } }
 /* Point the key (and the shadow it casts) along the azimuth/elevation dir. In
    headlight mode the per-frame updateLightLab() owns the direction instead. */
 function applyKeyDirection() {
@@ -2014,11 +2043,12 @@ function setLightSpin(on) {
 
 function applyLightPreset(name) {
   const p = LIGHT_PRESETS[name]; if (!p) return;
-  Object.assign(LIGHT_LAB, { key:p.key, casterShare:p.casterShare, fill:p.fill, az:p.az, el:p.el, exposure:p.exposure, tonemap:p.tonemap, bg:p.bg });
-  if (rimLight) { rimLight.intensity = p.rim; rimLight.color.setHex(p.rimColor); }
-  if (keyLight) { keyLight.color.setHex(p.keyColor); keyMainLight.color.setHex(p.keyColor); }
-  if (hemiLight) { hemiLight.color.setHex(p.hemiSky); hemiLight.groundColor.setHex(p.hemiGround); }
+  Object.assign(LIGHT_LAB, {
+    key:p.key, casterShare:p.casterShare, fill:p.fill, rim:p.rim, az:p.az, el:p.el, exposure:p.exposure, tonemap:p.tonemap, bg:p.bg,
+    keyColor:p.keyColor, rimColor:p.rimColor, hemiSky:p.hemiSky, hemiGround:p.hemiGround,
+  });
   applyKeyIntensity(); applyFillIntensity(); applyKeyDirection();
+  applyRim(); applyKeyColor(); applyRimColor(); applyHemiColors();
   applyExposure(); applyToneMap(); setBg(p.bg);
   syncChips(".ll-preset", "preset", name);   // highlight the active preset (also when applied on boot)
   syncLightLabUI();
@@ -2036,6 +2066,38 @@ function setFlatShading(on) {
 function setClay(on) {
   LIGHT_LAB.clay = on;
   eachPartMaterial((m, p) => { m.color.set(on ? CLAY_COLOR : p.color); });
+}
+
+/* ---- environment (image-based reflections) ---- */
+/* Build a procedural studio environment once: a soft vertical gradient (bright
+   overhead softbox -> neutral horizon -> dark floor) baked through PMREM so metal
+   parts have something to reflect. Fully offline — no HDR file, core three only. */
+function ensureStudioEnv() {
+  if (studioEnv.tex || !renderer) return studioEnv.tex;
+  const c = document.createElement("canvas"); c.width = 16; c.height = 256;
+  const ctx = c.getContext("2d");
+  const g = ctx.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0.00, "#ffffff");   // zenith softbox
+  g.addColorStop(0.25, "#e6e8ea");
+  g.addColorStop(0.55, "#b8bcc0");   // horizon
+  g.addColorStop(0.80, "#6c7075");
+  g.addColorStop(1.00, "#2b2e31");   // floor
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 16, 256);
+  const tex = new THREE.CanvasTexture(c);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  if ("sRGBEncoding" in THREE) tex.encoding = THREE.sRGBEncoding;   // colour-manage the source (r137)
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  studioEnv.tex = pmrem.fromEquirectangular(tex).texture;
+  pmrem.dispose(); tex.dispose();
+  return studioEnv.tex;
+}
+function setEnvironment(on) {
+  LIGHT_LAB.env = on;
+  if (scene) scene.environment = on ? ensureStudioEnv() : null;
+}
+function setEnvIntensity(v) {
+  MAT.envIntensity = v; LIGHT_LAB.envIntensity = v;
+  eachPartMaterial((m) => { m.envMapIntensity = v; });
 }
 
 /* Edge overlay: dark crease/silhouette lines drawn over each part — the single
@@ -2066,18 +2128,20 @@ function setBg(hex) {
 
 function resetLightLab() {
   Object.assign(LIGHT_LAB, {
-    key:0.6, casterShare:0.18, fill:0.55, exposure:1.0, az:35, el:47,
+    key:0.6, casterShare:0.18, fill:0.55, rim:0.28, exposure:1.0, az:35, el:47,
     tonemap:"none", bg:"#F9FAFA", headlight:false, shadows:true, ground:false, spin:false,
+    keyColor:0xffffff, rimColor:0xffffff, hemiSky:0xffffff, hemiGround:0x333333,
+    env:false, envIntensity:1.0,
     rough:0.6, metal:0.0, flat:false, clay:false, edges:false,
   });
-  if (rimLight) { rimLight.intensity = 0.28; rimLight.color.setHex(0xffffff); rimLight.position.set(0.2, -0.9, -0.8); }
-  if (fillLight) { fillLight.position.set(-1.1, 0.4, -0.6); }
-  if (keyLight) { keyLight.color.setHex(0xffffff); keyMainLight.color.setHex(0xffffff); }
-  if (hemiLight) { hemiLight.color.setHex(0xffffff); hemiLight.groundColor.setHex(0x333333); }
+  if (rimLight) rimLight.position.set(0.2, -0.9, -0.8);
+  if (fillLight) fillLight.position.set(-1.1, 0.4, -0.6);
   applyKeyIntensity(); applyFillIntensity(); applyKeyDirection(); applyShadows();
+  applyRim(); applyKeyColor(); applyRimColor(); applyHemiColors();
   applyExposure(); applyToneMap(); setBg("#F9FAFA");
   setRoughness(0.6); setMetalness(0.0); setFlatShading(false); setClay(false); setEdges(false);
   setGroundShadow(false); setLightSpin(false);
+  setEnvironment(false); setEnvIntensity(1.0);
   syncChips(".ll-preset", "preset", null);   // no preset is "active" at the neutral default
   syncLightLabUI();
   refreshReadout();
@@ -2090,11 +2154,11 @@ function refreshReadout() {
   const L = LIGHT_LAB;
   const dirNote = L.headlight ? " (rel. camera)" : "";
   el.textContent =
-    `key ${L.key.toFixed(2)}  fill ${L.fill.toFixed(2)}  rim ${(rimLight ? rimLight.intensity : 0).toFixed(2)}\n` +
+    `key ${L.key.toFixed(2)}  fill ${L.fill.toFixed(2)}  rim ${L.rim.toFixed(2)}  caster ${L.casterShare.toFixed(2)}\n` +
     `exposure ${L.exposure.toFixed(2)}  tone ${L.tonemap}\n` +
     `dir az ${Math.round(L.az)}°  el ${Math.round(L.el)}°${dirNote}\n` +
     `shadows ${L.shadows ? "on" : "off"}  ground ${L.ground ? "on" : "off"}  rot-lights ${L.spin ? "on" : "off"}\n` +
-    `mat rough ${L.rough.toFixed(2)}  metal ${L.metal.toFixed(2)}  flat ${L.flat ? "on" : "off"}`;
+    `mat rough ${L.rough.toFixed(2)}  metal ${L.metal.toFixed(2)}  flat ${L.flat ? "on" : "off"}  env ${L.env ? "on" : "off"}`;
 }
 function logSetup() {
   const out = {
@@ -2103,6 +2167,7 @@ function logSetup() {
                 azimuth: LIGHT_LAB.az, elevation: LIGHT_LAB.el, headlight: LIGHT_LAB.headlight,
                 shadows: LIGHT_LAB.shadows, groundShadow: LIGHT_LAB.ground, rotateLights: LIGHT_LAB.spin, background: LIGHT_LAB.bg },
     material: { roughness: LIGHT_LAB.rough, metalness: LIGHT_LAB.metal, flatShading: LIGHT_LAB.flat, clay: LIGHT_LAB.clay, edges: LIGHT_LAB.edges },
+    environment: { on: LIGHT_LAB.env, intensity: LIGHT_LAB.envIntensity },
   };
   const json = JSON.stringify(out, null, 2);
   console.log("[Light Lab] current setup:\n" + json);
@@ -2110,20 +2175,42 @@ function logSetup() {
   toast("Setup logged to console");
 }
 
+/* Emit the current look as a paste-ready LIGHT_PRESETS entry (closes the
+   tune-live -> bake-into-source loop). Matches the object shape of LIGHT_PRESETS. */
+function copyPreset() {
+  const L = LIGHT_LAB;
+  const hex = (n) => "0x" + ((n >>> 0) & 0xffffff).toString(16).padStart(6, "0");
+  const entry =
+    `myPreset: { key:${L.key.toFixed(2)}, casterShare:${L.casterShare.toFixed(2)}, fill:${L.fill.toFixed(2)}, ` +
+    `rim:${L.rim.toFixed(2)}, az:${Math.round(L.az)}, el:${Math.round(L.el)}, exposure:${L.exposure.toFixed(2)}, ` +
+    `tonemap:"${L.tonemap}", bg:"${L.bg}", keyColor:${hex(L.keyColor)}, rimColor:${hex(L.rimColor)}, ` +
+    `hemiSky:${hex(L.hemiSky)}, hemiGround:${hex(L.hemiGround)} },`;
+  console.log("[Light Lab] preset entry:\n" + entry);
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(entry).catch(() => {});
+  toast("Preset entry copied");
+}
+
 /* Push LIGHT_LAB values into the panel controls (after a preset / reset). */
 function syncLightLabUI() {
   const set = (id, v) => { const e = $(id); if (e) e.value = v; };
   const txt = (id, v) => { const e = $(id); if (e) e.textContent = v; };
+  const col = (id, n) => { const e = $(id); if (e) e.value = "#" + ((n >>> 0) & 0xffffff).toString(16).padStart(6, "0"); };
   set("llKey", Math.round(LIGHT_LAB.key * 100));   txt("llKeyV", LIGHT_LAB.key.toFixed(2));
   set("llFill", Math.round(LIGHT_LAB.fill * 100));  txt("llFillV", LIGHT_LAB.fill.toFixed(2));
+  set("llRim", Math.round(LIGHT_LAB.rim * 100));   txt("llRimV", LIGHT_LAB.rim.toFixed(2));
+  set("llCaster", Math.round(LIGHT_LAB.casterShare * 100)); txt("llCasterV", LIGHT_LAB.casterShare.toFixed(2));
   set("llExp", Math.round(LIGHT_LAB.exposure * 100)); txt("llExpV", LIGHT_LAB.exposure.toFixed(2));
   set("llAz", Math.round(LIGHT_LAB.az));   txt("llAzV", Math.round(LIGHT_LAB.az) + "°");
   set("llEl", Math.round(LIGHT_LAB.el));   txt("llElV", Math.round(LIGHT_LAB.el) + "°");
+  col("llKeyCol", LIGHT_LAB.keyColor); col("llRimCol", LIGHT_LAB.rimColor);
+  col("llSkyCol", LIGHT_LAB.hemiSky);  col("llGndCol", LIGHT_LAB.hemiGround);
   set("llRough", Math.round(LIGHT_LAB.rough * 100)); txt("llRoughV", LIGHT_LAB.rough.toFixed(2));
   set("llMetal", Math.round(LIGHT_LAB.metal * 100)); txt("llMetalV", LIGHT_LAB.metal.toFixed(2));
+  set("llEnv", Math.round(LIGHT_LAB.envIntensity * 100)); txt("llEnvV", LIGHT_LAB.envIntensity.toFixed(2));
   const sw = (id, on) => { const e = $(id); if (e) e.classList.toggle("on", on); };
   sw("swHeadlight", LIGHT_LAB.headlight); sw("swShadows", LIGHT_LAB.shadows);
   sw("swGround", LIGHT_LAB.ground); sw("swSpin", LIGHT_LAB.spin);
+  sw("swEnv", LIGHT_LAB.env);
   sw("swFlat", LIGHT_LAB.flat); sw("swClay", LIGHT_LAB.clay); sw("swEdges", LIGHT_LAB.edges);
   syncChips(".ll-tm", "tm", LIGHT_LAB.tonemap);
   syncChips(".ll-bgc", "bg", LIGHT_LAB.bg);
@@ -2140,11 +2227,23 @@ function wireLightLab() {
   };
   slider("llKey", "llKeyV", (v) => { LIGHT_LAB.key = v / 100; applyKeyIntensity(); }, (v) => (v / 100).toFixed(2));
   slider("llFill", "llFillV", (v) => { LIGHT_LAB.fill = v / 100; applyFillIntensity(); }, (v) => (v / 100).toFixed(2));
+  slider("llRim", "llRimV", (v) => { LIGHT_LAB.rim = v / 100; applyRim(); }, (v) => (v / 100).toFixed(2));
+  slider("llCaster", "llCasterV", (v) => { LIGHT_LAB.casterShare = v / 100; applyKeyIntensity(); }, (v) => (v / 100).toFixed(2));
   slider("llExp", "llExpV", (v) => { LIGHT_LAB.exposure = v / 100; applyExposure(); }, (v) => (v / 100).toFixed(2));
   slider("llAz", "llAzV", (v) => { LIGHT_LAB.az = v; applyKeyDirection(); }, (v) => v + "°");
   slider("llEl", "llElV", (v) => { LIGHT_LAB.el = v; applyKeyDirection(); }, (v) => v + "°");
   slider("llRough", "llRoughV", (v) => { LIGHT_LAB.rough = v / 100; setRoughness(v / 100); }, (v) => (v / 100).toFixed(2));
   slider("llMetal", "llMetalV", (v) => { LIGHT_LAB.metal = v / 100; setMetalness(v / 100); }, (v) => (v / 100).toFixed(2));
+  slider("llEnv", "llEnvV", (v) => { setEnvIntensity(v / 100); }, (v) => (v / 100).toFixed(2));
+
+  const colorInput = (id, key, apply) => {
+    const inp = $(id); if (!inp) return;
+    inp.addEventListener("input", () => { LIGHT_LAB[key] = parseInt(inp.value.slice(1), 16); apply(); refreshReadout(); });
+  };
+  colorInput("llKeyCol", "keyColor", applyKeyColor);
+  colorInput("llRimCol", "rimColor", applyRimColor);
+  colorInput("llSkyCol", "hemiSky", applyHemiColors);
+  colorInput("llGndCol", "hemiGround", applyHemiColors);
 
   toggleRow("ll-headlight", () => {
     LIGHT_LAB.headlight = !LIGHT_LAB.headlight; $("swHeadlight").classList.toggle("on", LIGHT_LAB.headlight);
@@ -2158,12 +2257,14 @@ function wireLightLab() {
   toggleRow("ll-flat", () => { const on = !LIGHT_LAB.flat; LIGHT_LAB.flat = on; $("swFlat").classList.toggle("on", on); setFlatShading(on); });
   toggleRow("ll-clay", () => { const on = !LIGHT_LAB.clay; $("swClay").classList.toggle("on", on); setClay(on); });
   toggleRow("ll-edges", () => { const on = !LIGHT_LAB.edges; $("swEdges").classList.toggle("on", on); setEdges(on); });
+  toggleRow("ll-env", () => { const on = !LIGHT_LAB.env; $("swEnv").classList.toggle("on", on); setEnvironment(on); refreshReadout(); });
 
   document.querySelectorAll(".ll-tm").forEach((c) => c.addEventListener("click", () => {
     LIGHT_LAB.tonemap = c.dataset.tm; syncChips(".ll-tm", "tm", c.dataset.tm); applyToneMap(); refreshReadout();
   }));
   document.querySelectorAll(".ll-bgc").forEach((c) => c.addEventListener("click", () => setBg(c.dataset.bg)));
 
+  $("llPreset").addEventListener("click", copyPreset);
   $("llLog").addEventListener("click", logSetup);
   $("llReset").addEventListener("click", resetLightLab);
   refreshReadout();
@@ -2420,6 +2521,7 @@ function boot() {
     showOverlay("empty");
   }
   if (DEV.lightPreset && LIGHT_PRESETS[DEV.lightPreset]) applyLightPreset(DEV.lightPreset);   // chosen boot/production lighting
+  if (DEV.env) { setEnvironment(true); syncLightLabUI(); }   // optional baked-in image-based reflections
 }
 
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);

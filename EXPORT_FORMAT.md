@@ -24,7 +24,12 @@ integration — no other change to the file is needed.
     "confidential": "Confidential — not for distribution",
     "upAxis": "z+",                  // z+ z- x+ x- y+ y-   (CAD default = z+)
     "projection": "persp",           // persp | ortho
-    "gridOn": false
+    "gridOn": false,
+    "panels": {                      // optional: initial expand/collapse per panel
+      "tools": true,                 //   true = collapsed, false = expanded
+      "objects": false,              //   omit a panel (or the whole object) to keep
+      "lightlab": true               //   the default (collapsed)
+    }
   },
   "files": [
     {
