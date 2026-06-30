@@ -16,9 +16,13 @@ const PRISTINE_HTML = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
 /* Branding — re-brand here, and swap the logo in index.html (search "BRAND LOGO"). */
 const BRAND = {
   name:         "3D Viewer",   // applied to document.title + header wordmark
-  copyright:    "",            // default for Model information, e.g. "© Acme Corp"
+  copyright:    "",            // default for Model information, e.g. "© 3D Corp"
   confidential: "",            // default confidential notice ("" = hidden)
 };
+
+/* Auto-enable the floor grid the first time a model is imported (drag-drop / file picker)
+   into a viewer that has the grid off. Set false to leave the grid state untouched. */
+const GRID_ON_IMPORT = true;
 
 /* ----------------------------------------------------------------------------
    DEVELOPER OPTIONS  (flip in source; not part of saved view state)
@@ -72,7 +76,7 @@ const state = {
   parts: [],         // runtime: {id, fileId, index, name, color, mesh, visible}
   measurements: [],  // runtime: {id, a:Vec3(local), b:Vec3(local), group, label}
   annotations: [],   // runtime: {id, p:Vec3(local), text, obj(CSS2DObject), marker}
-  section: { on: false, axis: "x", flip: false, offsets: { x: 0.5, y: 0.5, z: 0.5 } },
+  section: { on: false, axis: "x", flip: false, offsets: { x: null, y: null, z: null } },  // absolute mm from origin/grid; null = auto-centre
 };
 
 let fileSeq = 0, partSeq = 0, markSeq = 0;
@@ -231,7 +235,7 @@ function applyUpAxis(code) {
   q.setFromUnitVectors(up, new THREE.Vector3(0, 1, 0));
   modelRoot.quaternion.copy(q);
   modelRoot.updateMatrixWorld(true);
-  if (gridHelper) positionGrid();
+  if (gridHelper) ensureGrid();   // re-fit the origin-anchored floor to the new orientation
   if (state.section.on) buildSection();
   syncChips("#oriChips .chip", "axis", code);
 }
@@ -1260,13 +1264,40 @@ let stencilGroup = null;
 let capMesh = null;
 
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
-// offset (0..1) along the cut normal, remembered per file axis
-function secT() { return state.section.offsets[state.section.axis]; }
-function setSecT(v) { state.section.offsets[state.section.axis] = clamp01(v); }
+// Section offset is an ABSOLUTE signed distance (world mm) from the origin / floor grid,
+// measured along the cut normal and remembered per file axis. `null` = unset -> the cut
+// auto-centres on the model the first time the axis is built. Storing an absolute value
+// (rather than a 0..1 box fraction) keeps the cut put as parts move / hide / appear.
+function secD() { return state.section.offsets[state.section.axis]; }
+function setSecD(v) { state.section.offsets[state.section.axis] = v; }
 // world-space cut normal for the active axis, ignoring flip (the offset axis)
 function sectionBaseNormal() {
   return AXES[state.section.axis].clone().applyQuaternion(modelRoot.quaternion).normalize();
 }
+// model extent projected onto the active cut normal: signed distances from the origin
+function sectionSpan() {
+  const box = getWorldBox();
+  return box ? projectRange(box, sectionBaseNormal()) : null;
+}
+// resolved offset: the stored absolute mm, or the model centre when unset (null)
+function resolvedSecD() {
+  const d = secD();
+  if (typeof d === "number" && isFinite(d)) return d;
+  const box = getWorldBox();
+  return box ? box.getCenter(new THREE.Vector3()).dot(sectionBaseNormal()) : 0;
+}
+// Map between the 0..1 slider and an absolute offset using the live model extent, so the
+// knob still sweeps the model while the stored value stays grid-anchored (box-independent).
+function dToT(d) {
+  const r = sectionSpan(); if (!r || r.max <= r.min) return 0.5;
+  return clamp01((d - r.min) / (r.max - r.min));
+}
+function tToD(t) {
+  const r = sectionSpan(); if (!r) return 0;
+  return r.min + (r.max - r.min) * clamp01(t);
+}
+// position the slider knob from the active-axis offset (cosmetic; the cut owns the value)
+function syncSecSlider() { $("secSlider").value = Math.round(dToT(resolvedSecD()) * 1000); }
 
 function projectRange(box, normal) {
   const corners = [
@@ -1352,6 +1383,7 @@ function buildSection() {
   scene.add(capMesh);
 
   updateSectionGeometry();
+  syncSecSlider();   // keep the knob tracking the (fixed) cut as the model extent changes
 }
 
 function updateSectionGeometry() {
@@ -1360,9 +1392,10 @@ function updateSectionGeometry() {
   if (!box) return;
   const bn = sectionBaseNormal();                          // un-flipped offset axis
   const center = box.getCenter(new THREE.Vector3());
-  const { min, max } = projectRange(box, bn);
-  const eps = (max - min) * 0.001 + 1e-4;
-  const d = (min + eps) + (max - min - 2 * eps) * secT();  // distance along bn — fixed by offset
+  // absolute signed distance from the origin / floor grid along bn. Unset -> model centre,
+  // persisted so the cut is grid-anchored and never re-derived from the bounding box.
+  const d = resolvedSecD();
+  setSecD(d);
 
   // Flip only swaps which side is removed; the cut stays put. A plane (n, c) and
   // (-n, -c) are the same plane geometrically but clip opposite half-spaces.
@@ -1374,49 +1407,62 @@ function updateSectionGeometry() {
   capMesh.position.copy(onPlane);
   capMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), sectionPlane.normal);
 
-  // read-out: distance from the world origin (grid 0) along the axis, in mm. `d` is
-  // already the plane's signed offset from the origin along bn (origin·bn = 0), so the
-  // reading is origin-based, not bounding-box-based. Leave the field alone while typing.
-  const rel = d;
+  // read-out: signed distance from the origin / floor grid along the axis, in mm. The grid
+  // sits at the origin, so this reads directly against it. Leave the field alone while typing.
   const inp = $("secVal");
-  if (document.activeElement !== inp) inp.value = fmt(rel);
+  if (document.activeElement !== inp) inp.value = fmt(d);
 }
 
-// convert a typed mm offset (from the world origin / grid 0) into a slider position (0..1)
-function offsetToT(rel) {
-  const box = getWorldBox();
-  if (!box) return secT();
-  const bn = sectionBaseNormal();
-  const { min, max } = projectRange(box, bn);
-  const eps = (max - min) * 0.001 + 1e-4;
-  const span = (max - min) - 2 * eps;
-  if (span <= 0) return 0.5;
-  const d = rel;   // origin-based: the plane sits at distance `rel` from the origin along bn
-  return clamp01((d - (min + eps)) / span);
-}
-
-// mirror the active-axis offset onto the slider + input
+// mirror the active-axis offset onto the slider, then refresh the cut + read-out
 function syncSecUI() {
-  $("secSlider").value = Math.round(secT() * 1000);
+  syncSecSlider();
   if (state.section.on) updateSectionGeometry();
+}
+
+// Convert legacy box-fraction offsets (older saves) into absolute world mm from the origin,
+// using the same mapping the old build used, so a saved cut reproduces in the same place.
+// Runs once after a load, when the model box is available.
+function migrateLegacySectionOffsets() {
+  if (!state.section._legacyFrac) return;
+  const box = getWorldBox();
+  ["x", "y", "z"].forEach((ax) => {
+    const f = state.section.offsets[ax];
+    if (typeof f !== "number") return;
+    if (!box) { state.section.offsets[ax] = null; return; }   // no geometry -> defer to auto-centre
+    const bn = AXES[ax].clone().applyQuaternion(modelRoot.quaternion).normalize();
+    const { min, max } = projectRange(box, bn);
+    const eps = (max - min) * 0.001 + 1e-4;
+    state.section.offsets[ax] = (min + eps) + (max - min - 2 * eps) * clamp01(f);
+  });
+  delete state.section._legacyFrac;
 }
 
 /* ----------------------------------------------------------------------------
    Floor grid
 ---------------------------------------------------------------------------- */
-function ensureGrid() {
+// Span an origin-centred floor so it always reaches the model (and the origin), with a
+// sensible floor for parts sitting right on the origin.
+function gridFloorSize() {
   const box = getWorldBox();
-  const size = box ? box.getSize(new THREE.Vector3()).length() * 1.5 : 100;
+  if (!box) return 100;
+  const reachXZ = Math.max(Math.abs(box.min.x), Math.abs(box.max.x), Math.abs(box.min.z), Math.abs(box.max.z));
+  const diag = box.getSize(new THREE.Vector3()).length();
+  return Math.max(reachXZ * 2, diag * 1.5) * 1.1;
+}
+function ensureGrid() {
   if (gridHelper) scene.remove(gridHelper);
   const div = 20;
-  gridHelper = new THREE.GridHelper(size, div, 0xC2C7CD, 0xE1E3E7);
+  gridHelper = new THREE.GridHelper(gridFloorSize(), div, 0xC2C7CD, 0xE1E3E7);
   scene.add(gridHelper);
   positionGrid();
 }
 function positionGrid() {
   if (!gridHelper) return;
-  const box = getWorldBox();
-  if (box) gridHelper.position.set(box.getCenter(new THREE.Vector3()).x, box.min.y, box.getCenter(new THREE.Vector3()).z);
+  // Fixed datum: the floor grid IS the world-origin ground plane (Y=0), centred on the
+  // origin so its centre cross marks the X=0 / Z=0 section datum. It does not track the
+  // bounding box, so it stays put as parts are moved, hidden, or added — and the section
+  // read-out (distance from origin) reads directly against it.
+  gridHelper.position.set(0, 0, 0);
   gridHelper.visible = state.meta.gridOn;
 }
 function setGrid(on) {
@@ -1623,7 +1669,7 @@ function serializeState() {
       const r = partRef(a.part); if (r && a.pLocal) { o.ref = r; o.pLocal = a.pLocal.toArray(); }
       return o;
     }),
-    section: { on: state.section.on, axis: state.section.axis, flip: state.section.flip, offsets: Object.assign({}, state.section.offsets) },
+    section: { on: state.section.on, axis: state.section.axis, flip: state.section.flip, unit: "mm", offsets: Object.assign({}, state.section.offsets) },
   };
 }
 
@@ -1660,16 +1706,17 @@ function loadFromState(data) {
   showOverlay("loading");
   Object.assign(state.meta, data.meta || {});
   const sec = data.section || {};
-  // migrate older files that stored a single `t` instead of per-axis offsets
-  const def = (typeof sec.t === "number") ? sec.t : 0.5;
+  // Offsets are ABSOLUTE mm from the origin / floor grid when `unit==="mm"` (current files).
+  // Older files stored 0..1 fractions of the bounding box (per-axis `offsets`, or a single
+  // legacy `t`); flag them so we can convert to absolute once the model box is known below.
+  const legacyFrac = sec.unit !== "mm";
+  const fallback = (typeof sec.t === "number") ? sec.t : (legacyFrac ? 0.5 : null);
   const off = sec.offsets || {};
+  const pickOff = (v) => (typeof v === "number" ? v : fallback);
   state.section = {
     on: !!sec.on, axis: sec.axis || "x", flip: !!sec.flip,
-    offsets: {
-      x: (typeof off.x === "number") ? off.x : def,
-      y: (typeof off.y === "number") ? off.y : def,
-      z: (typeof off.z === "number") ? off.z : def,
-    },
+    offsets: { x: pickOff(off.x), y: pickOff(off.y), z: pickOff(off.z) },
+    _legacyFrac: legacyFrac,
   };
 
   applyUpAxis(state.meta.upAxis || "z+");
@@ -1701,10 +1748,11 @@ function loadFromState(data) {
       if (a.ref && a.pLocal) { opts.part = partIdFromRef(a.ref); opts.pLocal = new THREE.Vector3().fromArray(a.pLocal); }
       addAnnotation(p, a.text || "", opts);
     });
+    migrateLegacySectionOffsets();
     finishLoad();
     $("secFlip").classList.toggle("active", state.section.flip);
     if (state.section.on) { $("swSection").classList.add("on"); syncChips(".secAxis", "axis", state.section.axis); buildSection(); }
-    $("secSlider").value = Math.round(secT() * 1000);
+    syncSecSlider();
   });
 }
 
@@ -1733,8 +1781,8 @@ function readFilesAndAdd(fileList) {
   });
   chain.then(() => {
     rebuildObjectsPanel(); refreshInfoPanel();
-    if (!state.meta.gridOn) setGrid(true);
-    else if (gridHelper) ensureGrid();
+    if (GRID_ON_IMPORT && !state.meta.gridOn) setGrid(true);   // auto-enable on first import
+    else if (state.meta.gridOn) ensureGrid();                  // already on -> refit to new extents
     setView("iso"); hideOverlay();
   });
 }
@@ -2303,19 +2351,19 @@ function wireUI() {
   toggleRow("section", () => {
     state.section.on = !state.section.on;
     $("swSection").classList.toggle("on", state.section.on);
-    if (state.section.on) { syncChips(".secAxis", "axis", state.section.axis); buildSection(); } else teardownSection();
+    if (state.section.on) { syncChips(".secAxis", "axis", state.section.axis); buildSection(); syncSecSlider(); } else teardownSection();
   });
   document.querySelectorAll(".secAxis").forEach((c) => c.addEventListener("click", () => {
     state.section.axis = c.dataset.axis; syncChips(".secAxis", "axis", state.section.axis);
-    $("secSlider").value = Math.round(secT() * 1000);   // restore this axis' offset
     if (state.section.on) buildSection();
+    syncSecSlider();   // restore this axis' offset onto the slider
   }));
   $("secFlip").addEventListener("click", () => { state.section.flip = !state.section.flip; $("secFlip").classList.toggle("active", state.section.flip); if (state.section.on) updateSectionGeometry(); });
-  $("secSlider").addEventListener("input", (e) => { setSecT(e.target.value / 1000); updateSectionGeometry(); });
-  // typed offset: parse the mm value, map back to a slider position, clamp to bounds
+  $("secSlider").addEventListener("input", (e) => { setSecD(tToD(e.target.value / 1000)); updateSectionGeometry(); });
+  // typed offset is already an absolute mm distance from the origin / floor grid
   const commitSecVal = () => {
-    const rel = parseFloat($("secVal").value);
-    if (isFinite(rel)) setSecT(offsetToT(rel));
+    const v = parseFloat($("secVal").value);
+    if (isFinite(v)) setSecD(v);
     syncSecUI();
   };
   $("secVal").addEventListener("change", commitSecVal);
@@ -2487,8 +2535,8 @@ function removeAllParts() {
   clearMeasurements();
   state.annotations.slice().forEach((a) => removeAnnotation(a.id));
   teardownSection(); state.section.on = false; $("swSection").classList.remove("on");
-  // fresh model starts centred on every plane
-  state.section.offsets = { x: 0.5, y: 0.5, z: 0.5 };
+  // fresh model auto-centres the cut on every plane the next time section is enabled
+  state.section.offsets = { x: null, y: null, z: null };
   $("secSlider").value = 500; $("secVal").value = "";
   updateXformResetUI(); refreshInfoPanel(); showOverlay("empty");
 }

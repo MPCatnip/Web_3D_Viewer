@@ -45,7 +45,11 @@ integration — no other change to the file is needed.
   ],
   "measurements": [],                // optional
   "annotations": [],                 // optional: { "p":[x,y,z], "text":"…" }
-  "section": { "on": false, "axis": "x", "t": 0.5, "flip": false }
+  "section": {                       // optional cut plane
+    "on": false, "axis": "x", "flip": false,
+    "unit": "mm",                    // marks `offsets` as absolute mm (see note)
+    "offsets": { "x": null, "y": null, "z": null }   // mm from origin/grid; null = auto-centre
+  }
 }
 ```
 
@@ -67,6 +71,12 @@ Notes:
 - **`parts[].index`** is the 0-based order of the mesh within its file. For OBJ
   each `o`/`g` group is one part; for STL the whole file is one part.
 - **`parts[].color`** is an integer `0xRRGGBB` (e.g. `0xAEB4BD` = `11449533`).
+- **`section.offsets`** are absolute **mm from the world origin** (the floor grid sits
+  at the origin) along each file axis — a fixed datum, not a fraction of the bounding
+  box, so the cut stays put as parts move/hide. Mark them with **`unit: "mm"`**. Use
+  `null` for any axis to auto-centre the cut on the model. For back-compat, older files
+  without `unit` are read as 0..1 box fractions (or a single `t`) and converted on load.
+  You normally only need `section` when `on` is `true`.
 - Only `meta` + `files` are required. Everything else has sensible defaults.
 
 ## Minimal example (Python)
@@ -96,7 +106,8 @@ def build_viewer(empty_html, out_html, models, title):
                  "upAxis": "z+", "projection": "persp", "gridOn": False},
         "files": files, "parts": parts,
         "measurements": [], "annotations": [],
-        "section": {"on": False, "axis": "x", "t": 0.5, "flip": False},
+        "section": {"on": False, "axis": "x", "flip": False,
+                    "unit": "mm", "offsets": {"x": None, "y": None, "z": None}},
     }
 
     payload = json.dumps(state)
@@ -166,7 +177,8 @@ static void BuildViewer(string emptyHtml, string outHtml,
         "\"files\":[" + string.Join(",", files) + "]," +
         "\"parts\":[" + string.Join(",", parts) + "]," +
         "\"measurements\":[],\"annotations\":[]," +
-        "\"section\":{\"on\":false,\"axis\":\"x\",\"t\":0.5,\"flip\":false}}";
+        "\"section\":{\"on\":false,\"axis\":\"x\",\"flip\":false,\"unit\":\"mm\"," +
+        "\"offsets\":{\"x\":null,\"y\":null,\"z\":null}}}";
 
     // keep the JSON safe inside a <script> text node
     state = state.Replace("</script>", "<\\/script>").Replace("<!--", "<\\!--");
