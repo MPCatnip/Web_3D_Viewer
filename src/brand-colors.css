@@ -1,0 +1,16 @@
+/* ============================================================================
+   Brand palette — single source of truth for re-theming.
+   Edit these 5 values to re-brand. src/styles.css derives its grey/tint
+   scales from --gray/--accent-light via color-mix(); everything else in its
+   :root block is a structural token (radius, shadow, font...), not a brand
+   identity color. src/brand-logo.svg and src/favicon.svg are separate static
+   assets with their own hardcoded colors — edit those files directly if you
+   want their artwork to match this palette.
+   ========================================================================== */
+:root{
+  --accent:#389d86;
+  --slate:#495965;          /* slate / primary button */
+  --gray:#5B6770;
+  --accent-light:#59e8b1;
+  --bg:#F9FAFA;
+}

@@ -13,12 +13,9 @@ const PRISTINE_HTML = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
 /* ----------------------------------------------------------------------------
    Constants
 ---------------------------------------------------------------------------- */
-/* Branding — re-brand here, and swap the logo in index.html (search "BRAND LOGO"). */
-const BRAND = {
-  name:         "3D Viewer",   // applied to document.title + header wordmark
-  copyright:    "",            // default for Model information, e.g. "© 3D Corp"
-  confidential: "",            // default confidential notice ("" = hidden)
-};
+/* BRAND (name/copyright/confidential) lives in src/brand.config.js, inlined
+   before this script — see build.mjs. To re-brand, edit that file plus
+   src/brand-colors.css (palette) and src/brand-logo.svg (logo mark). */
 
 /* Auto-enable the floor grid the first time a model is imported (drag-drop / file picker)
    into a viewer that has the grid off. Set false to leave the grid state untouched. */
@@ -979,7 +976,8 @@ function spawnTempDot(local) {
 }
 function clearTempDot() { if (tempDot) { markerRoot.remove(tempDot); tempDot = null; } }
 
-const MEAS_COLOR = 0x389d86;   // matches the UI accent (--accent)
+const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const MEAS_COLOR = new THREE.Color(cssVar("--accent")).getHex();   // matches the UI accent (--accent)
 const XRAY_OPACITY = 0.3;
 function addMeasurement(a, b, bind) {
   bind = bind || {};
@@ -1076,7 +1074,7 @@ function applyMeasDisplay() {
    text is edited inline (no modal prompt).
 ---------------------------------------------------------------------------- */
 let annotDisplay = true;
-const ANNOT_COLOR = 0x495965;   // logo slate
+const ANNOT_COLOR = new THREE.Color(cssVar("--slate")).getHex();   // matches the logo slate (--slate)
 
 // Default label spot: offset up-and-right from the anchor in *screen* terms, then
 // frozen into local (file) space so the callout stays put as you orbit.

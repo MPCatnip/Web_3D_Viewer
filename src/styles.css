@@ -4,11 +4,8 @@
    ============================================================ */
 
 :root{
-  /* Accent palette — adjust these to re-theme */
-  --accent:#389d86;
-  --slate:#495965;          /* slate / primary button */
-  --gray:#5B6770;
-  --accent-light:#59e8b1;
+  /* Brand palette (--accent/--slate/--gray/--accent-light/--bg) now lives in
+     src/brand-colors.css, inlined before this stylesheet — see build.mjs. */
 
   /* Grey scale — derived from --gray, lightening toward white */
   --g1:color-mix(in srgb, var(--gray) 85%, white);
@@ -21,7 +18,6 @@
   --tint-3:color-mix(in srgb, var(--accent-light) 18%, white);
   --tint-4:color-mix(in srgb, var(--accent-light) 8%, white);
 
-  --bg:#F9FAFA;
   --panel:#ffffff;
   --border:#E1E3E7;
   --border-strong:#C2C7CD;

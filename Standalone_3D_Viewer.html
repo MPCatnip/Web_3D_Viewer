@@ -6,17 +6,33 @@
 <title>3D Viewer</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHN2ZyBpZD0iTGF5ZXJfMiIgZGF0YS1uYW1lPSJMYXllciAyIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0Ni40MiA1MS4zNCI+CiAgPGRlZnM+CiAgICA8c3R5bGU+CiAgICAgIC5jbHMtMSB7CiAgICAgICAgZmlsbDogIzM4OWQ4NjsKICAgICAgfQogICAgPC9zdHlsZT4KICA8L2RlZnM+CiAgPGcgaWQ9IkxheWVyXzYiIGRhdGEtbmFtZT0iTGF5ZXIgNiI+CiAgICA8cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik00Mi42NSwxMC40NkwyNy4yNSwxLjEzYy0yLjUtMS41MS01LjYtMS41MS04LjA5LDBMMy43NiwxMC40NmMtMi4zMiwxLjQxLTMuNzYsMy45Ni0zLjc2LDYuNjh2MTcuMDZjMCwyLjcxLDEuNDQsNS4yNywzLjc2LDYuNjhsMTUuNCw5LjMzYzEuMjUuNzUsMi42NSwxLjEzLDQuMDQsMS4xM3MyLjgtLjM4LDQuMDQtMS4xM2wxNS40LTkuMzNjMi4zMi0xLjQxLDMuNzYtMy45NiwzLjc2LTYuNjh2LTE3LjA2YzAtMi43MS0xLjQ0LTUuMjctMy43Ni02LjY4Wk01LjgzLDM3LjQ2Yy0xLjEzLS42OS0xLjgzLTEuOTMtMS44My0zLjI2di0xNi43OGwxMS41Niw3Yy4zMi4yLjY4LjI5LDEuMDMuMjkuNjgsMCwxLjM0LS4zNCwxLjcxLS45Ni41Ny0uOTQuMjctMi4xNy0uNjctMi43NWwtMTEuNzctNy4xMywxNS4zOC05LjMxYy42MS0uMzcsMS4yOS0uNTUsMS45Ny0uNTVzMS4zNi4xOCwxLjk3LjU1bDE1LjM4LDkuMzEtMTUuNTksOS40NGMtMi4zMiwxLjQxLTMuNzYsMy45Ni0zLjc2LDYuNjh2MTYuNzhsLTE1LjM3LTkuMzFaTTQwLjU4LDM3LjQ2bC0xNS4zNyw5LjMxdi0xNi43OGMwLTEuMzIuNy0yLjU3LDEuODMtMy4yNmwxNS4zNy05LjMxdjE2Ljc4YzAsMS4zMi0uNywyLjU3LTEuODMsMy4yNloiLz4KICA8L2c+Cjwvc3ZnPg==">
 <style>
+/* ============================================================================
+   Brand palette — single source of truth for re-theming.
+   Edit these 5 values to re-brand. src/styles.css derives its grey/tint
+   scales from --gray/--accent-light via color-mix(); everything else in its
+   :root block is a structural token (radius, shadow, font...), not a brand
+   identity color. src/brand-logo.svg and src/favicon.svg are separate static
+   assets with their own hardcoded colors — edit those files directly if you
+   want their artwork to match this palette.
+   ========================================================================== */
+:root{
+  --accent:#389d86;
+  --slate:#495965;          /* slate / primary button */
+  --gray:#5B6770;
+  --accent-light:#59e8b1;
+  --bg:#F9FAFA;
+}
+
+</style>
+<style>
 /* ============================================================
    3D Viewer — styles
    Light theme · flat · white panels · 2px grey border · pills
    ============================================================ */
 
 :root{
-  /* Accent palette — adjust these to re-theme */
-  --accent:#389d86;
-  --slate:#495965;          /* slate / primary button */
-  --gray:#5B6770;
-  --accent-light:#59e8b1;
+  /* Brand palette (--accent/--slate/--gray/--accent-light/--bg) now lives in
+     src/brand-colors.css, inlined before this stylesheet — see build.mjs. */
 
   /* Grey scale — derived from --gray, lightening toward white */
   --g1:color-mix(in srgb, var(--gray) 85%, white);
@@ -29,7 +45,6 @@
   --tint-3:color-mix(in srgb, var(--accent-light) 18%, white);
   --tint-4:color-mix(in srgb, var(--accent-light) 8%, white);
 
-  --bg:#F9FAFA;
   --panel:#ffffff;
   --border:#E1E3E7;
   --border-strong:#C2C7CD;
@@ -591,10 +606,10 @@ body.editing .info-edit-actions{display:flex}
 <!-- ===================== TOP BAR ===================== -->
 <div class="topbar">
   <div class="brand">
-    <!-- ===== BRAND LOGO — swap this block to re-brand (see BRAND in src/app.js) ===== -->
+    <!-- ===== BRAND LOGO — see src/brand-logo.svg, src/brand.config.js, src/brand-colors.css ===== -->
     <svg class="logo" viewBox="0 0 46.42 51.34" xmlns="http://www.w3.org/2000/svg" aria-label="3D Viewer" role="img">
-      <path fill="var(--slate)" d="M42.65,10.46L27.25,1.13c-2.5-1.51-5.6-1.51-8.09,0L3.76,10.46c-2.32,1.41-3.76,3.96-3.76,6.68v17.06c0,2.71,1.44,5.27,3.76,6.68l15.4,9.33c1.25.75,2.65,1.13,4.04,1.13s2.8-.38,4.04-1.13l15.4-9.33c2.32-1.41,3.76-3.96,3.76-6.68v-17.06c0-2.71-1.44-5.27-3.76-6.68ZM5.83,37.46c-1.13-.69-1.83-1.93-1.83-3.26v-16.78l11.56,7c.32.2.68.29,1.03.29.68,0,1.34-.34,1.71-.96.57-.94.27-2.17-.67-2.75l-11.77-7.13,15.38-9.31c.61-.37,1.29-.55,1.97-.55s1.36.18,1.97.55l15.38,9.31-15.59,9.44c-2.32,1.41-3.76,3.96-3.76,6.68v16.78l-15.37-9.31ZM40.58,37.46l-15.37,9.31v-16.78c0-1.32.7-2.57,1.83-3.26l15.37-9.31v16.78c0,1.32-.7,2.57-1.83,3.26Z"/>
-    </svg>
+  <path fill="#495965" d="M42.65,10.46L27.25,1.13c-2.5-1.51-5.6-1.51-8.09,0L3.76,10.46c-2.32,1.41-3.76,3.96-3.76,6.68v17.06c0,2.71,1.44,5.27,3.76,6.68l15.4,9.33c1.25.75,2.65,1.13,4.04,1.13s2.8-.38,4.04-1.13l15.4-9.33c2.32-1.41,3.76-3.96,3.76-6.68v-17.06c0-2.71-1.44-5.27-3.76-6.68ZM5.83,37.46c-1.13-.69-1.83-1.93-1.83-3.26v-16.78l11.56,7c.32.2.68.29,1.03.29.68,0,1.34-.34,1.71-.96.57-.94.27-2.17-.67-2.75l-11.77-7.13,15.38-9.31c.61-.37,1.29-.55,1.97-.55s1.36.18,1.97.55l15.38,9.31-15.59,9.44c-2.32,1.41-3.76,3.96-3.76,6.68v16.78l-15.37-9.31ZM40.58,37.46l-15.37,9.31v-16.78c0-1.32.7-2.57,1.83-3.26l15.37-9.31v16.78c0,1.32-.7,2.57-1.83,3.26Z"/>
+</svg>
     <span class="brand-name" id="brandName">3D Viewer</span>
     <!-- ===== /BRAND LOGO ===== -->
     <div class="sep"></div>
@@ -936,6 +951,26 @@ body.editing .info-edit-actions{display:flex}
 </div>
 
 <!--[[SCRIPTS]]-->
+<script>
+/* ============================================================================
+   Brand config — single source of truth for re-branding.
+   Edit this file (name/copyright/confidential), src/brand-colors.css (palette)
+   and src/brand-logo.svg (logo mark) to re-brand the viewer. No other source
+   file should need to change.
+
+   Declared as a plain top-level `const` (no wrapping IIFE) so it lands in the
+   shared script-scope lexical environment that all classic <script> tags in
+   this document contribute to — src/app.js's IIFE reads `BRAND` through that
+   shared scope. build.mjs inlines this file's <script> tag before
+   src/app.js's <script> tag, which is required for that to work.
+   ========================================================================== */
+const BRAND = {
+  name:         "3D Viewer",   // applied to document.title + header wordmark
+  copyright:    "",            // default for Model information, e.g. "© 3D Corp"
+  confidential: "",            // default confidential notice ("" = hidden)
+};
+
+</script>
 <script>
 /**
  * @license
@@ -8786,12 +8821,9 @@ const PRISTINE_HTML = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
 /* ----------------------------------------------------------------------------
    Constants
 ---------------------------------------------------------------------------- */
-/* Branding — re-brand here, and swap the logo in index.html (search "BRAND LOGO"). */
-const BRAND = {
-  name:         "3D Viewer",   // applied to document.title + header wordmark
-  copyright:    "",            // default for Model information, e.g. "© Acme Corp"
-  confidential: "",            // default confidential notice ("" = hidden)
-};
+/* BRAND (name/copyright/confidential) lives in src/brand.config.js, inlined
+   before this script — see build.mjs. To re-brand, edit that file plus
+   src/brand-colors.css (palette) and src/brand-logo.svg (logo mark). */
 
 /* Auto-enable the floor grid the first time a model is imported (drag-drop / file picker)
    into a viewer that has the grid off. Set false to leave the grid state untouched. */
@@ -9752,7 +9784,8 @@ function spawnTempDot(local) {
 }
 function clearTempDot() { if (tempDot) { markerRoot.remove(tempDot); tempDot = null; } }
 
-const MEAS_COLOR = 0x389d86;   // matches the UI accent (--accent)
+const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const MEAS_COLOR = new THREE.Color(cssVar("--accent")).getHex();   // matches the UI accent (--accent)
 const XRAY_OPACITY = 0.3;
 function addMeasurement(a, b, bind) {
   bind = bind || {};
@@ -9849,7 +9882,7 @@ function applyMeasDisplay() {
    text is edited inline (no modal prompt).
 ---------------------------------------------------------------------------- */
 let annotDisplay = true;
-const ANNOT_COLOR = 0x495965;   // logo slate
+const ANNOT_COLOR = new THREE.Color(cssVar("--slate")).getHex();   // matches the logo slate (--slate)
 
 // Default label spot: offset up-and-right from the anchor in *screen* terms, then
 // frozen into local (file) space so the callout stays put as you orbit.

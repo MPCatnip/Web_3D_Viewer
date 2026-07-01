@@ -30,6 +30,20 @@ html = html.replace(
   () => `<link rel="icon" type="image/svg+xml" href="${favData}">`   // function replacement: no $ pattern substitution
 );
 
+// 0b) inline the brand palette (see src/brand-colors.css) and logo mark (see
+// src/brand-logo.svg) — both are edited directly by a rebrander, no build-time
+// recoloring, same treatment as the favicon above.
+const brandColorsCss = read("src/brand-colors.css");
+html = html.replace(
+  /<!--\[\[BRAND_COLORS\]\]--><link rel="stylesheet" href="src\/brand-colors\.css">/,
+  () => "<style>\n" + brandColorsCss + "\n</style>"
+);
+const brandLogoSvg = read("src/brand-logo.svg").trim();
+html = html.replace(
+  /<!--\[\[BRAND_LOGO\]\]--><img class="logo" src="src\/brand-logo\.svg" alt="3D Viewer">/,
+  () => brandLogoSvg
+);
+
 // 1) inline stylesheet (drop the Light panel's CSS too when the panel is disabled)
 let css = read("src/styles.css");
 if (!lightPanel) {
@@ -44,6 +58,7 @@ html = html.replace(
 
 // 2) inline scripts in order
 const scripts = [
+  "src/brand.config.js",   // must precede src/app.js: app.js's IIFE reads BRAND via shared script-scope
   "vendor/three.min.js",
   "vendor/OrbitControls.js",
   "vendor/TransformControls.js",
