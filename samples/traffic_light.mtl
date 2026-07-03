@@ -7,6 +7,7 @@ Ns 900
 newmtl amber
 Kd 0.87 0.60 0.13
 Ns 250
+Pm 1.0
 
 newmtl green
 Kd 0.20 0.67 0.33

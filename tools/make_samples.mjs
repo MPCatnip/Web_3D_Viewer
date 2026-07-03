@@ -49,7 +49,7 @@ fs.writeFileSync(path.join(out, "traffic_light.obj"), tl);
 const mtl = [
   "# sample material library", "",
   "newmtl red",   "Kd 0.80 0.20 0.20", "Ns 900", "",   // high gloss
-  "newmtl amber", "Kd 0.87 0.60 0.13", "Ns 250", "",   // satin
+  "newmtl amber", "Kd 0.87 0.60 0.13", "Ns 250", "Pm 1.0", "",   // satin, metallic
   "newmtl green", "Kd 0.20 0.67 0.33", "Ns 10", "",    // near matte
 ].join("\n");
 fs.writeFileSync(path.join(out, "traffic_light.mtl"), mtl);

@@ -316,15 +316,32 @@ body{
 .obj-row{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:10px;cursor:pointer}
 .obj-row:hover{background:var(--tint-4)}
 .obj-row.selected{background:var(--tint-3);box-shadow:inset 0 0 0 2px var(--tint-1)}
-.obj-row .swatch,.mat-detail .swatch{width:18px;height:18px;border-radius:5px;border:2px solid #fff;box-shadow:0 0 0 1px var(--g3);flex:none;cursor:pointer;overflow:hidden;position:relative}
-.obj-row .swatch input,.mat-detail .swatch input{position:absolute;inset:-6px;opacity:0;cursor:pointer}
-/* per-material color + finish lines: revealed under the selected part's row only */
-.mat-detail{display:none;flex-direction:column;gap:2px;padding:2px 10px 8px 30px}
-.obj-row.selected + .mat-detail{display:flex}
-.mat-detail .mat-line{margin-top:2px;gap:8px}
-.mat-detail .mat-line input[type=range]{min-width:0}   /* let the slider shrink to the panel width */
-.mat-detail .swatch.mini{width:14px;height:14px;border-radius:4px;border-width:1px}
-.mat-detail .mat-val{font-size:11px;color:var(--text-muted);flex:none;width:30px;text-align:right;font-variant-numeric:tabular-nums}
+/* row icon: a button showing the part color (or a gradient for multi-material);
+   clicking opens the appearance popover */
+.obj-row .swatch{width:18px;height:18px;border-radius:5px;border:2px solid #fff;box-shadow:0 0 0 1px var(--g3);flex:none;cursor:pointer;padding:0;appearance:none}
+/* appearance popover: per-group tabs + inline color picker (SV square, hue strip,
+   RGB/HSL/Hex fields) + gloss + metalness */
+.mat-pop{position:fixed;z-index:1000;width:264px;background:#fff;border:1px solid var(--g3);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.16);padding:12px;display:flex;flex-direction:column}
+.mat-pop[hidden]{display:none}
+.mat-pop .slider-row{margin-top:9px;gap:8px}
+.mat-pop .pop-lbl{font-size:11px;color:var(--text-muted);flex:none;width:32px}
+.mat-pop input[type=range]{min-width:0}
+.mat-pop .val-in{width:42px}
+.mat-pop .mat-tabs{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
+.mat-pop .mat-tab{width:22px;height:22px;border-radius:6px;border:2px solid #fff;box-shadow:0 0 0 1px var(--g3);cursor:pointer;padding:0;appearance:none}
+.mat-pop .mat-tab.active{box-shadow:0 0 0 2px var(--accent)}
+.mat-pop .sv-area{position:relative;width:100%;height:150px;border-radius:8px;cursor:crosshair;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12);touch-action:none}
+.mat-pop .sv-dot{position:absolute;width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.45);transform:translate(-50%,-50%);pointer-events:none}
+.mat-pop .hue-strip{position:relative;height:12px;border-radius:6px;margin-top:12px;cursor:pointer;touch-action:none;background:linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)}
+.mat-pop .hue-knob{position:absolute;top:50%;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.35),0 1px 3px rgba(0,0,0,.3);transform:translate(-50%,-50%);pointer-events:none}
+.mat-pop .color-fields{display:flex;align-items:center;gap:6px;margin-top:11px}
+.mat-pop .mode-btn{flex:none;width:44px;font:inherit;font-size:11px;font-weight:600;color:var(--text-soft);background:var(--tint-4);border:none;border-radius:6px;padding:4px 0;cursor:pointer}
+.mat-pop .mode-btn:hover{background:var(--tint-3)}
+.mat-pop .cf-in{flex:1;min-width:0;font:inherit;font-size:12px;color:var(--text-soft);text-align:center;background:transparent;border:2px solid var(--g4);border-radius:6px;padding:3px 2px;outline:none;font-variant-numeric:tabular-nums}
+.mat-pop .cf-in:hover{border-color:var(--g2)}
+.mat-pop .cf-in:focus{border-color:var(--accent)}
+.mat-pop .cf-hex{text-transform:uppercase;text-align:left;padding:3px 8px}
+.mat-pop .cf-in::-webkit-outer-spin-button,.mat-pop .cf-in::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .obj-row .oname{flex:1;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .obj-row .oname[contenteditable=true]{background:#fff;box-shadow:inset 0 0 0 1px var(--tint-1);border-radius:5px;padding:1px 4px}
 /* edit mode: part names look like editable fields (dashed box + pencil) and rename on a single click */
@@ -8848,11 +8865,15 @@ const GRID_ON_IMPORT = true;
                  (Tune values live with the panel, then bake the winner here.)
    env           Boot with the procedural studio environment on (image-based
                  reflections). Needed for the Metal slider to read as metal.
+   materialFinish  Show the Gloss + Metal sliders in a part's appearance popover.
+                 Set false to ship a colour-only picker (finish still loads and
+                 persists from saved state / .mtl; it just isn't user-editable).
 ---------------------------------------------------------------------------- */
 const DEV = {
   lightPanel:  true,
   lightPreset: "dramatic",
   env:         false,
+  materialFinish: true,
 };
 
 const NEUTRAL_COLOR = 0x9099A2;      // default shaded part color (mid neutral grey)
@@ -9235,6 +9256,9 @@ function partColorAt(p, mi) { return (p.colors && p.colors[mi] != null) ? p.colo
 /* the explicit roughness for material group mi of part p (null/absent = global default) */
 function partRoughAt(p, mi) { return (p.rough && p.rough[mi] != null) ? p.rough[mi] : MAT.roughness; }
 
+/* the explicit metalness for material group mi of part p (null/absent = global default) */
+function partMetalAt(p, mi) { return (p.metal && p.metal[mi] != null) ? p.metal[mi] : MAT.metalness; }
+
 /* minimal .mtl parser -> { materialName: { color: 0xRRGGBB|null, rough: 0..1|null } }
    Kd = diffuse color; finish comes from Pr (PBR roughness, wins) or Ns (specular
    exponent 0..1000, mapped to roughness like the glTF converters do). */
@@ -9249,7 +9273,7 @@ function parseMTL(text) {
     if (sp < 0) return;
     const key = line.slice(0, sp).toLowerCase();
     const rest = line.slice(sp + 1).trim();
-    if (key === "newmtl") { cur = out[rest] = { color: null, rough: null }; }
+    if (key === "newmtl") { cur = out[rest] = { color: null, rough: null, metal: null }; }
     else if (key === "kd" && cur) {
       const c = rest.split(/\s+/).map(parseFloat);
       if (c.length >= 3 && c.every((v) => isFinite(v))) {
@@ -9262,6 +9286,9 @@ function parseMTL(text) {
     } else if (key === "ns" && cur && !cur.hasPr) {
       const v = parseFloat(rest);
       if (isFinite(v)) cur.rough = clamp01(1 - Math.sqrt(Math.max(0, Math.min(1000, v)) / 1000));
+    } else if (key === "pm" && cur) {
+      const v = parseFloat(rest);
+      if (isFinite(v)) cur.metal = clamp01(v);
     }
   });
   return out;
@@ -9314,6 +9341,7 @@ function parseModel(format, buffer, done, opts) {
           const mats = matArray(c);
           c.userData.mtlColors = mats.map((mat) => (mat.name in lib ? lib[mat.name].color : null));
           c.userData.mtlRough = mats.map((mat) => (mat.name in lib ? lib[mat.name].rough : null));
+          c.userData.mtlMetal = mats.map((mat) => (mat.name in lib ? lib[mat.name].metal : null));
         }
       });
       done(group);
@@ -9377,20 +9405,19 @@ function registerObject(object3d, fileId, metaParts, format) {
       visible: pm ? pm.visible !== false : true,
     };
     if (colors) part.colors = colors;
-    // per-group finish: explicit roughness overrides (saved state or .mtl Ns/Pr);
-    // entries left null keep the global MAT.roughness default
-    {
-      const pmRough = pm && pm.rough != null ? (Array.isArray(pm.rough) ? pm.rough : [pm.rough]) : null;
-      const mtlRough = mesh.userData.mtlRough;
-      const mats = matArray(mesh);
-      const rough = mats.map((m, mi) => {
-        let r = (pmRough && pmRough[mi] != null) ? pmRough[mi]
-          : (mtlRough && mtlRough[mi] != null) ? mtlRough[mi] : null;
-        if (r != null) { r = Math.max(0, Math.min(1, r)); m.roughness = r; }
-        return r;
+    // per-group finish: explicit roughness/metalness overrides (saved state or
+    // .mtl Ns/Pr/Pm); entries left null keep the global MAT defaults
+    [["rough", "roughness", "mtlRough"], ["metal", "metalness", "mtlMetal"]].forEach(([key, prop, seed]) => {
+      const pmVals = pm && pm[key] != null ? (Array.isArray(pm[key]) ? pm[key] : [pm[key]]) : null;
+      const mtlVals = mesh.userData[seed];
+      const vals = matArray(mesh).map((m, mi) => {
+        let v = (pmVals && pmVals[mi] != null) ? pmVals[mi]
+          : (mtlVals && mtlVals[mi] != null) ? mtlVals[mi] : null;
+        if (v != null) { v = Math.max(0, Math.min(1, v)); m[prop] = v; }
+        return v;
       });
-      if (rough.some((r) => r != null)) part.rough = rough;
-    }
+      if (vals.some((v) => v != null)) part[key] = vals;
+    });
     mesh.userData.partId = part.id;
     mesh.visible = part.visible;
     mesh.castShadow = true;       // each part shadows itself and the others
@@ -10415,21 +10442,15 @@ function rebuildObjectsPanel() {
     row.className = "obj-row" + (p.id === selectedId ? " selected" : "") + (p.visible ? "" : " hidden-part");
     row.dataset.id = p.id;
 
-    let sw;
-    if (p.colors && p.colors.length > 1) {
-      // multi-material part: the row icon is a gradient of the group colors;
-      // individual pickers live in the detail block shown on selection
-      sw = document.createElement("div"); sw.className = "swatch multi";
-      sw.style.background = partGradientCSS(p);
-      sw.title = "Multi-material — select to edit colors";
-    } else {
-      sw = document.createElement("label"); sw.className = "swatch";
-      sw.style.background = "#" + new THREE.Color(p.color).getHexString();
-      const ci = document.createElement("input"); ci.type = "color"; ci.value = "#" + new THREE.Color(p.color).getHexString();
-      ci.addEventListener("input", (e) => setPartColor(p.id, e.target.value));
-      ci.addEventListener("click", (e) => e.stopPropagation());
-      sw.appendChild(ci);
-    }
+    // one swatch opens the appearance popover (color + finish + metalness);
+    // multi-material parts show a gradient of the group colors and the popover
+    // carries per-group tabs
+    const multi = p.colors && p.colors.length > 1;
+    const sw = document.createElement("button");
+    sw.className = "swatch" + (multi ? " multi" : "");
+    sw.style.background = multi ? partGradientCSS(p) : "#" + new THREE.Color(p.color).getHexString();
+    sw.title = "Edit appearance";
+    sw.addEventListener("click", (e) => { e.stopPropagation(); openMatPopover(p.id, 0, sw); });
 
     const nm = document.createElement("div"); nm.className = "oname"; nm.textContent = p.name;
     nm.title = editMode ? "Click to rename" : p.name;
@@ -10458,8 +10479,8 @@ function rebuildObjectsPanel() {
     row.appendChild(eye);
     row.addEventListener("click", () => selectPart(p.id, true));
     list.appendChild(row);
-    list.appendChild(buildMatDetail(p));   // gloss sliders; CSS shows it only while the row is selected
   });
+  closeMatPopover();                       // anchors were just rebuilt; drop any open popover
 }
 
 /* hard-stop gradient of the group colors, used as the multi-material row icon */
@@ -10472,38 +10493,264 @@ function partGradientCSS(p) {
   return `linear-gradient(135deg, ${stops.join(", ")})`;
 }
 
-/* per-material finish panel under a part row: color picker + gloss slider per group */
-function buildMatDetail(p) {
-  const det = document.createElement("div");
-  det.className = "mat-detail";
-  det.dataset.id = p.id;
-  const mats = matArray(p.mesh);
-  mats.forEach((m, mi) => {
-    const line = document.createElement("div"); line.className = "slider-row mat-line";
+/* ---- appearance popover: inline color picker + gloss + metalness ----
+   One popover, reused for every swatch. Multi-material parts get per-group
+   tabs at the top so the whole appearance is edited without leaving the popup. */
+let matPop = null;                 // lazily created
+let matPopTarget = null;           // { id, mi } currently being edited
+let matPopAnchor = null;           // swatch the popover is positioned against
 
-    const s = document.createElement("label"); s.className = "swatch mini";
-    s.dataset.mi = mi;
-    s.style.background = "#" + new THREE.Color(partColorAt(p, mi)).getHexString();
-    s.title = (mats.length > 1 && m && m.name) || "Color";
-    const inp = document.createElement("input"); inp.type = "color";
-    inp.value = "#" + new THREE.Color(partColorAt(p, mi)).getHexString();
-    inp.addEventListener("input", (e) => setPartMaterialColor(p.id, mi, e.target.value));
-    inp.addEventListener("click", (e) => e.stopPropagation());
-    s.appendChild(inp);
+// THREE stores HSL; the picker works in HSV, so convert through it.
+function hexToHsv(hex) {
+  const hsl = new THREE.Color(hex).getHSL({});
+  const v = hsl.l + hsl.s * Math.min(hsl.l, 1 - hsl.l);
+  const s = v === 0 ? 0 : 2 * (1 - hsl.l / v);
+  return { h: hsl.h, s, v };
+}
+function hsvToHex(h, s, v) {
+  const l = v * (1 - s / 2);
+  const m = Math.min(l, 1 - l);
+  const sl = m === 0 ? 0 : (v - l) / m;
+  return "#" + new THREE.Color().setHSL(h, sl, l).getHexString();
+}
 
-    const sl = document.createElement("input");
-    sl.type = "range"; sl.min = 0; sl.max = 100; sl.step = 1;
-    sl.value = Math.round((1 - partRoughAt(p, mi)) * 100);
-    sl.title = "Finish: 0% = matte, 100% = high gloss";
-    const val = document.createElement("span"); val.className = "mat-val";
-    val.textContent = sl.value + "%";
-    sl.addEventListener("input", () => { setPartGloss(p.id, mi, +sl.value); val.textContent = sl.value + "%"; });
-    sl.addEventListener("click", (e) => e.stopPropagation());
+function ensureMatPopover() {
+  if (matPop) return matPop;
+  matPop = document.createElement("div");
+  matPop.className = "mat-pop";
+  matPop.hidden = true;
+  matPop._hsv = { h: 0, s: 0, v: 0 };
+  matPop._hex = "#888888";
+  matPop._mode = "hex";
+  const clamp01 = (v) => Math.max(0, Math.min(1, v));
 
-    line.appendChild(s); line.appendChild(sl); line.appendChild(val);
-    det.appendChild(line);
+  const tabs = document.createElement("div"); tabs.className = "mat-tabs";
+  matPop.appendChild(tabs);
+
+  // saturation (x) / value (y) square with a draggable dot
+  const sv = document.createElement("div"); sv.className = "sv-area";
+  const svDot = document.createElement("div"); svDot.className = "sv-dot";
+  sv.appendChild(svDot); matPop.appendChild(sv);
+
+  // hue strip: plain gradient div + knob (styled native ranges proved unreliable)
+  const hueStrip = document.createElement("div"); hueStrip.className = "hue-strip"; hueStrip.title = "Hue";
+  const hueKnob = document.createElement("div"); hueKnob.className = "hue-knob";
+  hueStrip.appendChild(hueKnob); matPop.appendChild(hueStrip);
+
+  // color value fields with a RGB / HSL / Hex format switcher
+  const cf = document.createElement("div"); cf.className = "color-fields";
+  const modeBtn = document.createElement("button"); modeBtn.className = "mode-btn"; modeBtn.title = "Switch color format (RGB / HSL / Hex)";
+  const f = [0, 1, 2].map(() => {
+    const i = document.createElement("input");
+    i.type = "number"; i.min = 0; i.className = "cf-in";
+    return i;
   });
-  return det;
+  const fhex = document.createElement("input");
+  fhex.type = "text"; fhex.className = "cf-in cf-hex"; fhex.maxLength = 7; fhex.spellcheck = false;
+  cf.appendChild(modeBtn); f.forEach((i) => cf.appendChild(i)); cf.appendChild(fhex);
+  matPop.appendChild(cf);
+
+  const mkSlider = (label, title) => {
+    const line = document.createElement("div"); line.className = "slider-row";
+    const nm = document.createElement("span"); nm.className = "pop-lbl"; nm.textContent = label;
+    const sl = document.createElement("input");
+    sl.type = "range"; sl.min = 0; sl.max = 100; sl.step = 1; sl.title = title;
+    const num = document.createElement("input");
+    num.type = "number"; num.min = 0; num.max = 100; num.step = 1; num.className = "val-in";
+    line.appendChild(nm); line.appendChild(sl); line.appendChild(num);
+    matPop.appendChild(line);
+    return { sl, num };
+  };
+  // finish sliders are a developer option (DEV.materialFinish) — a colour-only
+  // picker ships when they're off, but saved/.mtl finish still loads underneath
+  const gloss = DEV.materialFinish ? mkSlider("Gloss", "0 = matte, 100 = high gloss") : null;
+  const metal = DEV.materialFinish ? mkSlider("Metal", "0 = dielectric, 100 = metal") : null;
+
+  matPop._refs = { tabs, sv, svDot, hueStrip, hueKnob, modeBtn, f, fhex, gloss, metal };
+
+  // repaint the picker chrome from the current HSV/hex
+  const paint = () => {
+    const { h, s, v } = matPop._hsv;
+    sv.style.background =
+      "linear-gradient(to top, #000, rgba(0,0,0,0))," +
+      "linear-gradient(to right, #fff, rgba(255,255,255,0))," +
+      "hsl(" + Math.round(h * 360) + ",100%,50%)";
+    svDot.style.left = (s * 100) + "%";
+    svDot.style.top = ((1 - v) * 100) + "%";
+    svDot.style.background = matPop._hex;
+    hueKnob.style.left = (matPop._hsv.h * 100) + "%";
+  };
+  matPop._paint = paint;
+
+  // fill the value fields for the active format from the current hex
+  const fillFields = () => {
+    const mode = matPop._mode;
+    modeBtn.textContent = mode.toUpperCase();
+    f.forEach((i) => { i.style.display = mode === "hex" ? "none" : ""; });
+    fhex.style.display = mode === "hex" ? "" : "none";
+    const c = new THREE.Color(matPop._hex);
+    if (mode === "rgb") {
+      const vals = [Math.round(c.r * 255), Math.round(c.g * 255), Math.round(c.b * 255)];
+      f.forEach((i, k) => { i.max = 255; i.value = vals[k]; i.title = "RGB"[k]; });
+    } else if (mode === "hsl") {
+      const hsl = c.getHSL({});
+      const vals = [Math.round(hsl.h * 360), Math.round(hsl.s * 100), Math.round(hsl.l * 100)];
+      const max = [360, 100, 100];
+      f.forEach((i, k) => { i.max = max[k]; i.value = vals[k]; i.title = "HSL"[k]; });
+    } else {
+      fhex.value = matPop._hex.toUpperCase();
+    }
+  };
+  matPop._fillFields = fillFields;
+
+  // route a new color into the model + UI. `src` marks which control produced
+  // it, so that control isn't clobbered mid-edit.
+  const applyHex = (hex, src) => {
+    matPop._hex = hex;
+    if (src !== "sv") matPop._hsv = hexToHsv(hex);
+    paint();
+    if (src !== "fields") fillFields();
+    if (matPopTarget) { setPartMaterialColor(matPopTarget.id, matPopTarget.mi, hex); updateMatTab(); }
+  };
+
+  // pointer-drag helper — window-tracked, no pointer capture (keeps it scriptable)
+  const drag = (el, onAt) => {
+    let on = false;
+    const move = (e) => { if (on) onAt(e); };
+    const up = () => { on = false; window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    el.addEventListener("pointerdown", (e) => { e.preventDefault(); on = true; onAt(e); window.addEventListener("pointermove", move); window.addEventListener("pointerup", up); });
+  };
+  drag(sv, (e) => {
+    const r = sv.getBoundingClientRect();
+    matPop._hsv.s = clamp01((e.clientX - r.left) / r.width);
+    matPop._hsv.v = clamp01(1 - (e.clientY - r.top) / r.height);
+    applyHex(hsvToHex(matPop._hsv.h, matPop._hsv.s, matPop._hsv.v), "sv");
+  });
+  drag(hueStrip, (e) => {
+    const r = hueStrip.getBoundingClientRect();
+    matPop._hsv.h = clamp01((e.clientX - r.left) / r.width);
+    applyHex(hsvToHex(matPop._hsv.h, matPop._hsv.s, matPop._hsv.v), "sv");
+  });
+
+  modeBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    matPop._mode = matPop._mode === "rgb" ? "hsl" : matPop._mode === "hsl" ? "hex" : "rgb";
+    fillFields();
+  });
+  const fieldsChanged = () => {
+    const mode = matPop._mode;
+    if (mode === "hex") {
+      const val = fhex.value.trim().replace(/^#/, "");
+      if (/^[0-9a-fA-F]{6}$/.test(val)) applyHex("#" + val.toLowerCase(), "fields");
+      return;
+    }
+    const nums = f.map((i) => parseFloat(i.value));
+    if (nums.some((n) => !isFinite(n))) return;
+    let hex;
+    if (mode === "rgb") {
+      const b = (n) => Math.max(0, Math.min(255, Math.round(n)));
+      hex = "#" + ((b(nums[0]) << 16) | (b(nums[1]) << 8) | b(nums[2])).toString(16).padStart(6, "0");
+    } else {
+      hex = "#" + new THREE.Color().setHSL(clamp01(nums[0] / 360), clamp01(nums[1] / 100), clamp01(nums[2] / 100)).getHexString();
+    }
+    applyHex(hex, "fields");
+  };
+  f.forEach((i) => i.addEventListener("input", fieldsChanged));
+  fhex.addEventListener("change", () => { fieldsChanged(); fillFields(); });   // normalize (or restore) on commit
+
+  // gloss/metal — slider and number field drive each other and the model
+  const bindPair = (pair, setter) => {
+    const sync = (raw) => {
+      if (!isFinite(raw)) return;
+      const v = Math.max(0, Math.min(100, Math.round(raw)));
+      pair.sl.value = v; pair.num.value = v;
+      if (matPopTarget) setter(matPopTarget.id, matPopTarget.mi, v);
+    };
+    pair.sl.addEventListener("input", () => sync(+pair.sl.value));
+    pair.num.addEventListener("input", () => { if (pair.num.value !== "") sync(+pair.num.value); });
+  };
+  if (gloss) bindPair(gloss, setPartGloss);
+  if (metal) bindPair(metal, setPartMetal);
+
+  matPop.addEventListener("pointerdown", (e) => e.stopPropagation());
+  document.body.appendChild(matPop);
+  window.addEventListener("pointerdown", (e) => {
+    if (matPop.hidden || matPop.contains(e.target)) return;
+    if (e.target.closest && e.target.closest(".obj-row .swatch")) return;  // its own click toggles/retargets
+    closeMatPopover();
+  });
+  window.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMatPopover(); });
+  return matPop;
+}
+
+/* per-group tab buttons at the top of the popover (hidden for single-material) */
+function buildMatTabs(p) {
+  const tabs = matPop._refs.tabs;
+  tabs.innerHTML = "";
+  const mats = matArray(p.mesh);
+  if (mats.length <= 1) { tabs.style.display = "none"; return; }
+  tabs.style.display = "flex";
+  mats.forEach((m, mi) => {
+    const t = document.createElement("button"); t.className = "mat-tab"; t.dataset.mi = mi;
+    t.style.background = "#" + new THREE.Color(partColorAt(p, mi)).getHexString();
+    t.title = (m && m.name) || ("Material " + (mi + 1));
+    t.addEventListener("click", (e) => { e.stopPropagation(); selectMatTab(mi); });
+    tabs.appendChild(t);
+  });
+}
+
+/* switch which material group the popover edits (no reposition) */
+function selectMatTab(mi) {
+  if (!matPopTarget) return;
+  const p = partById(matPopTarget.id); if (!p) return;
+  matPopTarget.mi = mi;
+  loadMatPopover(p, mi);
+}
+
+/* load one group's color/finish into the controls + highlight its tab */
+function loadMatPopover(p, mi) {
+  const { gloss, metal, tabs } = matPop._refs;
+  const hx = "#" + new THREE.Color(partColorAt(p, mi)).getHexString();
+  matPop._hex = hx;
+  matPop._hsv = hexToHsv(hx);
+  matPop._paint();
+  matPop._fillFields();
+  if (gloss) { const g = Math.round((1 - partRoughAt(p, mi)) * 100); gloss.sl.value = g; gloss.num.value = g; }
+  if (metal) { const mt = Math.round(partMetalAt(p, mi) * 100); metal.sl.value = mt; metal.num.value = mt; }
+  tabs.querySelectorAll(".mat-tab").forEach((t) => t.classList.toggle("active", +t.dataset.mi === mi));
+}
+
+/* recolor the active tab's swatch after a live color edit */
+function updateMatTab() {
+  if (!matPopTarget) return;
+  const p = partById(matPopTarget.id); if (!p) return;
+  const t = matPop._refs.tabs.querySelector('.mat-tab[data-mi="' + matPopTarget.mi + '"]');
+  if (t) t.style.background = "#" + new THREE.Color(partColorAt(p, matPopTarget.mi)).getHexString();
+}
+
+function openMatPopover(id, mi, anchor) {
+  const p = partById(id); if (!p) return;
+  const pop = ensureMatPopover();
+  if (!pop.hidden && matPopTarget && matPopTarget.id === id) { closeMatPopover(); return; }  // same swatch toggles off
+  matPopTarget = { id, mi };
+  matPopAnchor = anchor;
+  buildMatTabs(p);
+  loadMatPopover(p, mi);
+  pop.hidden = false;
+  // sit fully clear of the objects panel (to its left), aligned with the part's row
+  const r = anchor.getBoundingClientRect();
+  const panel = anchor.closest(".panel");
+  const pr = panel ? panel.getBoundingClientRect() : r;
+  const pw = pop.offsetWidth, ph = pop.offsetHeight;
+  let x = pr.left - pw - 10;
+  if (x < 8) x = Math.min(window.innerWidth - pw - 8, pr.right + 10);   // no room: right of the panel
+  const y = Math.max(8, Math.min(r.top - 8, window.innerHeight - ph - 8));
+  pop.style.left = x + "px"; pop.style.top = y + "px";
+}
+
+function closeMatPopover() {
+  if (matPop) matPop.hidden = true;
+  matPopTarget = null; matPopAnchor = null;
 }
 
 /* set the finish of one material group: gloss 0..100 -> roughness 1..0 */
@@ -10516,8 +10763,19 @@ function setPartGloss(id, mi, gloss) {
   if (mats[mi]) mats[mi].roughness = r;
 }
 
+/* set the metalness of one material group: 0..100 -> 0..1 */
+function setPartMetal(id, mi, pct) {
+  const p = partById(id); if (!p) return;
+  const mats = matArray(p.mesh);
+  if (!p.metal) p.metal = mats.map(() => null);
+  const v = Math.max(0, Math.min(1, pct / 100));
+  p.metal[mi] = v;
+  if (mats[mi]) mats[mi].metalness = v;
+}
+
 function highlightRow(id) {
   document.querySelectorAll(".obj-row").forEach((r) => r.classList.toggle("selected", r.dataset.id === id));
+  closeMatPopover();   // its anchor swatch may just have been hidden with the old selection
 }
 
 function beginRenamePart(el, id) {
@@ -10558,15 +10816,10 @@ function setPartMaterialColor(id, mi, hex) {
   refreshObjInfo();
 }
 
-/* keep the row icon (solid color or gradient) and the detail pickers in sync */
+/* keep the row icon (solid color or gradient) in sync after a color edit */
 function refreshPartSwatches(p) {
   const row = document.querySelector('.obj-row[data-id="' + p.id + '"] .swatch');
   if (row) row.style.background = (p.colors && p.colors.length > 1) ? partGradientCSS(p) : "#" + new THREE.Color(p.color).getHexString();
-  document.querySelectorAll('.mat-detail[data-id="' + p.id + '"] .swatch').forEach((s) => {
-    const hex = "#" + new THREE.Color(partColorAt(p, +s.dataset.mi)).getHexString();
-    s.style.background = hex;
-    const inp = s.querySelector("input"); if (inp) inp.value = hex;
-  });
 }
 
 function togglePartVisible(id) {
@@ -10665,8 +10918,9 @@ function serializeState() {
       const o = { fileId: p.fileId, index: p.index, name: p.name, color: p.color, visible: p.visible };
       // per-material-group colors (multi-material OBJ/GLB); `color` stays as the legacy fallback
       if (p.colors && p.colors.length > 1) o.colors = p.colors.slice();
-      // per-group finish overrides (roughness 0..1); null entries = global default
+      // per-group finish overrides (roughness/metalness 0..1); null entries = global default
       if (p.rough && p.rough.some((r) => r != null)) o.rough = p.rough.map((r) => (r == null ? null : Math.round(r * 1000) / 1000));
+      if (p.metal && p.metal.some((v) => v != null)) o.metal = p.metal.map((v) => (v == null ? null : Math.round(v * 1000) / 1000));
       const E2 = XFORM_EPS * XFORM_EPS;
       // baseline ("default") transform — stored as the offset from the pristine loader pose
       if (p.loaderPos && p.basePos.distanceToSquared(p.loaderPos) > E2) o.dpos = p.basePos.clone().sub(p.loaderPos).toArray();
@@ -11135,7 +11389,7 @@ function applyLightPreset(name) {
 /* ---- material knobs ---- */
 function eachPartMaterial(fn) { state.parts.forEach((p) => { matArray(p.mesh).forEach((m, mi) => { if (m) fn(m, p, mi); }); }); }
 function setRoughness(v) { MAT.roughness = v; eachPartMaterial((m, p, mi) => { if (!(p.rough && p.rough[mi] != null)) m.roughness = v; }); refreshReadout(); }
-function setMetalness(v) { MAT.metalness = v; eachPartMaterial((m) => { m.metalness = v; }); refreshReadout(); }
+function setMetalness(v) { MAT.metalness = v; eachPartMaterial((m, p, mi) => { if (!(p.metal && p.metal[mi] != null)) m.metalness = v; }); refreshReadout(); }
 function setFlatShading(on) {
   MAT.flat = on;
   eachPartMaterial((m) => { m.flatShading = on; m.needsUpdate = true; });

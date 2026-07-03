@@ -43,7 +43,8 @@ integration — no other change to the file is needed.
   "parts": [                         // optional; omit to auto-name every mesh
     { "fileId": "f1", "index": 0, "name": "Body 1", "color": 11515581, "visible": true,
       "colors": [13382451, 14522658],   // optional: one 0xRRGGBB per material group (multi-material OBJ/GLB)
-      "rough": [0.1, null] }            // optional: finish per group, 0 = high gloss .. 1 = matte; null = default
+      "rough": [0.1, null],             // optional: finish per group, 0 = high gloss .. 1 = matte; null = default
+      "metal": [null, 1] }              // optional: metalness per group, 0 = dielectric .. 1 = metal; null = default
   ],
   "measurements": [],                // optional
   "annotations": [],                 // optional: { "p":[x,y,z], "text":"…" }
@@ -86,6 +87,9 @@ Notes:
   for a group. A single-material part uses a one-element array (a bare number is
   also accepted). Interactive `.mtl` import seeds these from `Pr` (PBR roughness)
   or `Ns` (specular exponent, mapped `roughness = 1 - sqrt(Ns/1000)`).
+- **`parts[].metal`** (optional) works the same way for metalness `0..1` (`0` =
+  plastic/dielectric, `1` = metal; viewer default `0`). Interactive `.mtl` import
+  seeds it from `Pm` (PBR metallic).
 - **`section.offsets`** are absolute **mm from the world origin** (the floor grid sits
   at the origin) along each file axis — a fixed datum, not a fraction of the bounding
   box, so the cut stays put as parts move/hide. Mark them with **`unit: "mm"`**. Use

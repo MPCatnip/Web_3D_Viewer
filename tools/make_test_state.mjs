@@ -31,7 +31,7 @@ const state = {
     { fileId: "f1", index: 1, name: "Pillar", color: 0xe8a23f, visible: true },
     { fileId: "f2", index: 0, name: "Wedge", color: 0x8a5fc9, visible: true },
     // multi-material part: per-usemtl-group colors + finish persisted (no .mtl needed at load)
-    { fileId: "f3", index: 0, name: "Traffic Light", color: 0xcc3333, colors: [0xcc3333, 0xdd9922, 0x33aa55], rough: [0.05, null, 0.9], visible: true },
+    { fileId: "f3", index: 0, name: "Traffic Light", color: 0xcc3333, colors: [0xcc3333, 0xdd9922, 0x33aa55], rough: [0.05, null, 0.9], metal: [null, 1, null], visible: true },
   ],
   measurements: [],
   annotations: [{ p: [40, 40, 70], text: "Pillar top" }],
