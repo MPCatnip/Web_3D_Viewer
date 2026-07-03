@@ -333,24 +333,6 @@
     <div class="divider"></div>
     <div class="obj-list" id="objList"></div>
     <div class="objinfo" id="objInfo">No part selected.</div>
-    <div class="part-coords" id="partCoords" style="display:none">
-      <div class="cc-row">
-        <span class="cc-lbl">Pos</span>
-        <span class="cc"><label for="posX">X</label><input type="text" id="posX" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Position X (mm)"></span>
-        <span class="cc"><label for="posY">Y</label><input type="text" id="posY" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Position Y (mm)"></span>
-        <span class="cc"><label for="posZ">Z</label><input type="text" id="posZ" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Position Z (mm)"></span>
-      </div>
-      <div class="cc-row">
-        <span class="cc-lbl">Rot°</span>
-        <span class="cc"><label for="rotX">X</label><input type="text" id="rotX" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Rotation X (degrees)"></span>
-        <span class="cc"><label for="rotY">Y</label><input type="text" id="rotY" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Rotation Y (degrees)"></span>
-        <span class="cc"><label for="rotZ">Z</label><input type="text" id="rotZ" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Rotation Z (degrees)"></span>
-      </div>
-      <div class="cc-row">
-        <span class="cc-lbl">Scale</span>
-        <span class="cc cc-wide"><label for="rotZ">S</label><input type="text" id="scaleU" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Overall scale (uniform)"></span>
-      </div>
-    </div>
     <div class="obj-foot">
       <button id="btnIsolate" class="btn">Isolate</button>
       <button id="btnHideSel" class="btn">Hide</button>
@@ -402,6 +384,8 @@
 <div id="dropHint" class="drop-hint"><div class="ring">Drop to add to the view</div></div>
 <div id="hint" class="hint"></div>
 
+<!-- transform dock: drag readout + Move/Rotate bar (top) + input panel (bottom), bottom-anchored -->
+<div id="xformDock" class="xform-dock">
 <!-- live distance / rotation read-out while dragging a gizmo handle -->
 <div id="xformReadout" class="xform-readout"></div>
 
@@ -417,6 +401,53 @@
   <button id="xfClose" class="xf-btn xf-close" title="Close — exit transform mode">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
   </button>
+</div>
+
+<!-- transform panel: absolute pose + relative nudge + placement actions (transform mode only) -->
+<div id="xformPanel" class="xform-panel">
+  <div class="part-coords" id="partCoords" style="display:none">
+    <div class="cc-row">
+      <span class="cc-lbl">Pos</span>
+      <span class="cc"><label for="posX">X</label><input type="text" id="posX" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Position X (mm)"></span>
+      <span class="cc"><label for="posY">Y</label><input type="text" id="posY" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Position Y (mm)"></span>
+      <span class="cc"><label for="posZ">Z</label><input type="text" id="posZ" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Position Z (mm)"></span>
+    </div>
+    <div class="cc-row">
+      <span class="cc-lbl">Rot°</span>
+      <span class="cc"><label for="rotX">X</label><input type="text" id="rotX" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Rotation X (degrees)"></span>
+      <span class="cc"><label for="rotY">Y</label><input type="text" id="rotY" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Rotation Y (degrees)"></span>
+      <span class="cc"><label for="rotZ">Z</label><input type="text" id="rotZ" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Rotation Z (degrees)"></span>
+    </div>
+    <div class="cc-row sc-row uni" id="scaleRow">
+      <span class="cc-lbl">Scale</span>
+      <span class="cc"><label for="scaleX">X</label><input type="text" id="scaleX" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Scale X"></span>
+      <span class="cc"><label for="scaleY">Y</label><input type="text" id="scaleY" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Scale Y"></span>
+      <span class="cc"><label for="scaleZ">Z</label><input type="text" id="scaleZ" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Scale Z"></span>
+      <button id="scaleLink" class="sc-link on" aria-pressed="true" title="Lock X/Y/Z to scale uniformly"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></button>
+    </div>
+  </div>
+  <div class="xf-nudge part-coords" id="xfNudge" style="display:none">
+    <div class="cc-row">
+      <span class="cc-lbl">Δ mm</span>
+      <span class="cc"><label for="ndX">X</label><input type="text" id="ndX" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Move by X (mm)"></span>
+      <span class="cc"><label for="ndY">Y</label><input type="text" id="ndY" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Move by Y (mm)"></span>
+      <span class="cc"><label for="ndZ">Z</label><input type="text" id="ndZ" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Move by Z (mm)"></span>
+      <button id="ndMove" class="btn xf-apply" title="Move the selection by this offset — Enter or Apply repeats">Apply</button>
+    </div>
+    <div class="cc-row">
+      <span class="cc-lbl">Δ °</span>
+      <span class="cc"><label for="ndRX">X</label><input type="text" id="ndRX" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Rotate by X (degrees)"></span>
+      <span class="cc"><label for="ndRY">Y</label><input type="text" id="ndRY" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Rotate by Y (degrees)"></span>
+      <span class="cc"><label for="ndRZ">Z</label><input type="text" id="ndRZ" class="val-in" inputmode="decimal" spellcheck="false" autocomplete="off" title="Rotate by Z (degrees)"></span>
+      <button id="ndRot" class="btn xf-apply" title="Rotate the selection about its pivot — Enter or Apply repeats">Apply</button>
+    </div>
+  </div>
+  <div class="xf-actions" id="xfActions" style="display:none">
+    <button id="btnFloor" class="btn" title="Drop the selection so it rests on the floor grid (Y=0)">Place on floor</button>
+    <button id="btnCenterCoM" class="btn" title="Move each selected part's origin to its centre of mass (the part does not move)">Origin to CoM</button>
+  </div>
+  <div class="xf-none" id="xfNone">Select a part to transform</div>
+</div>
 </div>
 
 <!--[[SCRIPTS]]-->

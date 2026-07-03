@@ -177,6 +177,10 @@ function initThree() {
   markerRoot = new THREE.Group();
   modelRoot.add(markerRoot);
   scene.add(modelRoot);
+  // proxy pivot for multi-select transforms: the gizmo attaches here and the pivot's
+  // delta is mirrored onto every selected mesh (see updateGizmoAttachment / onPartMoving)
+  xformPivot = new THREE.Object3D();
+  modelRoot.add(xformPivot);
   applyUpAxis(state.meta.upAxis);
 
   onResize();
@@ -265,7 +269,9 @@ function getLocalBox() {
     const g = p.mesh.geometry;
     if (!g.boundingBox) g.computeBoundingBox();
     if (!g.boundingBox) return;
-    box.union(g.boundingBox); any = true;
+    // undo any "Origin → CoM" pivot shift so file-space dimensions stay truthful
+    box.union(p.origin ? g.boundingBox.clone().translate(p.origin) : g.boundingBox);
+    any = true;
   });
   return any ? box : null;
 }
@@ -536,6 +542,15 @@ function registerObject(object3d, fileId, metaParts, format) {
     mesh.matrixAutoUpdate = true;
 
     const pm = metaParts && metaParts[i];
+    // saved pivot shift ("Origin → CoM"): re-apply below the loader layer — geometry
+    // shifts and the loader pose is compensated BEFORE it is captured at the bottom of
+    // this function, so every persisted transform delta applies unchanged.
+    if (pm && pm.origin) {
+      const oc = new THREE.Vector3().fromArray(pm.origin);
+      mesh.geometry.translate(-oc.x, -oc.y, -oc.z);
+      mesh.geometry.computeBoundingBox();
+      mesh.position.add(oc.clone().multiply(mesh.scale).applyQuaternion(mesh.quaternion));
+    }
     // multi-material mesh (usemtl groups / glTF primitives): keep one part but one
     // makePartMaterial per group, unless a legacy save carries only a single color.
     const src = Array.isArray(mesh.material) ? mesh.material : null;
@@ -571,6 +586,8 @@ function registerObject(object3d, fileId, metaParts, format) {
       color,
       mesh,
       visible: pm ? pm.visible !== false : true,
+      // cumulative geometry-local pivot shift ("Origin → CoM"); null = pristine origin
+      origin: pm && pm.origin ? new THREE.Vector3().fromArray(pm.origin) : null,
     };
     if (colors) part.colors = colors;
     // per-group finish: explicit roughness/metalness overrides (saved state or
@@ -659,33 +676,56 @@ function addFile(name, buffer, opts) {
 /* ----------------------------------------------------------------------------
    Selection
 ---------------------------------------------------------------------------- */
-let selectedId = null;
+let selectedId = null;   // primary selection (last added) — single-part consumers read this
+let selectedIds = [];    // ordered multi-selection; invariant: last entry === selectedId
+
+function isSelected(id) { return selectedIds.indexOf(id) !== -1; }
+function getSelectedParts() { return selectedIds.map(partById).filter(Boolean); }
+function primaryPart() { return partById(selectedId); }
+
+// single place that repaints highlights (emissive + rows) and the gizmo for the selection
+function applySelectionVisuals() {
+  state.parts.forEach((p) => {
+    const on = isSelected(p.id);
+    matArray(p.mesh).forEach((m) => { m.emissive.setHex(on ? SELECT_EMIS : 0x000000); if (on) m.emissiveIntensity = 0.35; });
+  });
+  if (xformMode) updateGizmoAttachment();
+  refreshObjInfo();
+  highlightRows();
+}
 
 function selectPart(id, fromList) {
-  if (id && id === selectedId) { deselect(); return; }  // clicking again toggles off
-  if (selectedId) {
-    const prev = partById(selectedId);
-    if (prev) matArray(prev.mesh).forEach((m) => m.emissive.setHex(0x000000));
-  }
+  if (id && id === selectedId && selectedIds.length === 1) { deselect(); return; }  // clicking again toggles off
+  selectedIds = id ? [id] : [];
+  selectedId = id || null;
+  applySelectionVisuals();
+}
+
+// ctrl-click: toggle one part in/out of the selection; the last added becomes primary
+function togglePartSelection(id) {
+  if (!id) return;
+  const i = selectedIds.indexOf(id);
+  if (i === -1) selectedIds.push(id); else selectedIds.splice(i, 1);
+  selectedId = selectedIds.length ? selectedIds[selectedIds.length - 1] : null;
+  applySelectionVisuals();
+}
+
+// shift-click in the list: contiguous range from the primary to `id` (which becomes primary)
+function selectRangeTo(id) {
+  if (!selectedId || selectedId === id) { selectPart(id, true); return; }
+  const order = state.parts.map((p) => p.id);
+  const a = order.indexOf(selectedId), b = order.indexOf(id);
+  if (a === -1 || b === -1) { selectPart(id, true); return; }
+  selectedIds = a < b ? order.slice(a, b + 1) : order.slice(b, a + 1).reverse();
   selectedId = id;
-  const p = partById(id);
-  if (p) {
-    matArray(p.mesh).forEach((m) => { m.emissive.setHex(SELECT_EMIS); m.emissiveIntensity = 0.35; });
-  }
-  if (xformMode) { if (p) attachGizmo(id); else detachGizmo(); }
-  refreshObjInfo();
-  highlightRow(id);
+  applySelectionVisuals();
 }
 
 function deselect() {
-  if (selectedId) {
-    const p = partById(selectedId);
-    if (p) matArray(p.mesh).forEach((m) => m.emissive.setHex(0x000000));
-  }
+  selectedIds = [];
   selectedId = null;
   detachGizmo();
-  refreshObjInfo();
-  highlightRow(null);
+  applySelectionVisuals();
 }
 
 function partById(id) { return state.parts.find((p) => p.id === id); }
@@ -748,10 +788,27 @@ function partMoved(p) {
   return p.mesh.quaternion.angleTo(p.baseQuat) > XFORM_EPS;
 }
 
-function attachGizmo(id) {
-  const p = partById(id);
-  if (!p) { detachGizmo(); return; }
-  transformControls.attach(p.mesh);
+// The gizmo attaches straight to a single selected mesh (same as always), or — for a
+// multi-selection — to xformPivot, a proxy placed at the selection centroid whose drag
+// delta is applied to every selected mesh. Re-attaching also re-zeroes the pivot's
+// rotation so successive world-space rotate drags don't compound oddly.
+let xformPivot = null;
+function updateGizmoAttachment() {
+  if (!transformControls) return;
+  const sel = getSelectedParts();
+  if (!xformMode || sel.length === 0) { detachGizmo(); return; }
+  if (sel.length === 1) {
+    transformControls.attach(sel[0].mesh);
+  } else {
+    const c = new THREE.Vector3();
+    sel.forEach((p) => c.add(p.mesh.position));
+    c.multiplyScalar(1 / sel.length);
+    xformPivot.position.copy(c);
+    xformPivot.quaternion.identity();
+    xformPivot.scale.set(1, 1, 1);
+    xformPivot.updateMatrixWorld(true);
+    transformControls.attach(xformPivot);
+  }
   transformControls.setMode(gizmoMode);
   transformControls.enabled = true;
   transformControls.visible = true;
@@ -769,8 +826,10 @@ function setXformMode(on) {
   xformMode = on;
   $("btnXform").classList.toggle("active", on);
   document.body.classList.toggle("xediting", on);
+  $("xformDock").classList.toggle("show", on);
   $("xformBar").classList.toggle("show", on);
-  if (on) { const p = partById(selectedId); if (p) attachGizmo(selectedId); }
+  $("xformPanel").classList.toggle("show", on);
+  if (on) updateGizmoAttachment();
   else { detachGizmo(); hideXformReadout(); }
   updatePartCoords();
 }
@@ -784,6 +843,7 @@ function setGizmoMode(m) {
 
 /* live read-out (distance while moving, angle while rotating) ---------------- */
 let dragStartPos = null, dragStartQuat = null;
+let groupStart = null;   // per-part start poses while dragging the multi-select pivot
 function showXformReadout(html) { const r = $("xformReadout"); r.innerHTML = html; r.classList.add("show"); }
 function hideXformReadout() { $("xformReadout").classList.remove("show"); }
 
@@ -792,11 +852,31 @@ function onPartMoveStart() {
   if (!o) return;
   dragStartPos = o.position.clone();
   dragStartQuat = o.quaternion.clone();
+  groupStart = (o === xformPivot)
+    ? getSelectedParts().map((p) => ({ p, pos: p.mesh.position.clone(), quat: p.mesh.quaternion.clone() }))
+    : null;
 }
+
+// apply one rigid delta (all in modelRoot space) to a set of captured start poses:
+// translate by dPos and revolve/spin by dQuat about pivotPoint. Shared by the
+// multi-select gizmo drag, the nudge fields and Place-on-floor.
+function applyGroupDelta(starts, dPos, dQuat, pivotPoint) {
+  starts.forEach(({ p, pos, quat }) => {
+    p.mesh.position.copy(pos).sub(pivotPoint).applyQuaternion(dQuat).add(pivotPoint).add(dPos);
+    p.mesh.quaternion.copy(dQuat).multiply(quat);
+    p.mesh.updateMatrixWorld(true);
+  });
+}
+
 // fires continuously while a handle is dragged
 function onPartMoving() {
   const o = transformControls.object;
   if (!o || !dragStartPos) return;
+  if (o === xformPivot && groupStart) {
+    const dPos = o.position.clone().sub(dragStartPos);
+    const dQuat = o.quaternion.clone().multiply(dragStartQuat.clone().invert());
+    applyGroupDelta(groupStart, dPos, dQuat, dragStartPos);
+  }
   if (gizmoMode === "rotate") {
     const deg = THREE.MathUtils.radToDeg(dragStartQuat.angleTo(o.quaternion));
     showXformReadout('↻ <b>' + deg.toFixed(0) + '°</b>');
@@ -811,10 +891,12 @@ function onPartMoving() {
 // dragging a handle finished: keep dependent visuals in sync and surface the reset UI
 function onPartMoveEnd() {
   hideXformReadout();
+  groupStart = null;
   if (state.section.on) buildSection();
   updateXformResetUI();
   updatePartCoords();
   refreshObjInfo();
+  updateGizmoAttachment();   // re-centre + re-zero the multi-select pivot after a drag
 }
 
 function resetPartTransform(id) {
@@ -824,20 +906,12 @@ function resetPartTransform(id) {
   p.mesh.quaternion.copy(p.baseQuat);
   p.mesh.scale.copy(p.baseScale);
   p.mesh.updateMatrixWorld(true);
-  if (state.section.on) buildSection();
-  updateXformResetUI();
-  updatePartCoords();
-  refreshObjInfo();
-  refreshMarkers();
+  afterGroupEdit();
 }
 
 function resetAllTransforms() {
   state.parts.forEach((p) => { p.mesh.position.copy(p.basePos); p.mesh.quaternion.copy(p.baseQuat); p.mesh.scale.copy(p.baseScale); p.mesh.updateMatrixWorld(true); });
-  if (state.section.on) buildSection();
-  updateXformResetUI();
-  updatePartCoords();
-  refreshObjInfo();
-  refreshMarkers();
+  afterGroupEdit();
 }
 
 // bake the current poses into the baseline: Reset now returns here, and "Save file"
@@ -848,6 +922,7 @@ function saveTransformsAsDefault() {
   state.parts.forEach((p) => { p.basePos.copy(p.mesh.position); p.baseQuat.copy(p.mesh.quaternion); p.baseScale.copy(p.mesh.scale); });
   updateXformResetUI();
   updatePartCoords();
+  if (xformMode) updateGizmoAttachment();
   toast("Current transforms set as default");
 }
 
@@ -864,13 +939,21 @@ const fmtDeg = (d) => String(+(d).toFixed(1));
 const fmtScale = (s) => String(+(s).toFixed(3));
 const _euler = new THREE.Euler();
 
-// Position / rotation / scale fields for the selected part (visible only while transforming)
+// Transform panel fields for the current selection (visible only while transforming).
+// Absolute pos/rot/scale show the primary part; with a multi-selection they are
+// display-only (dimmed via .multi) and the nudge rows drive the whole group.
 function updatePartCoords() {
   const box = $("partCoords");
   if (!box) return;
-  const p = (xformMode && selectedId) ? partById(selectedId) : null;
+  const sel = xformMode ? getSelectedParts() : [];
+  const show = (id, on) => { const el = $(id); if (el) el.style.display = on ? "" : "none"; };
+  show("xfNone", sel.length === 0);
+  show("xfNudge", sel.length > 0);
+  show("xfActions", sel.length > 0);
+  const p = sel.length ? primaryPart() : null;
   if (!p) { box.style.display = "none"; return; }
   box.style.display = "";
+  box.classList.toggle("multi", sel.length > 1);
   const m = p.mesh;
   const af = document.activeElement;                       // don't clobber a field being typed into
   const set = (id, val) => { const el = $(id); if (af !== el) el.value = val; };
@@ -879,12 +962,13 @@ function updatePartCoords() {
   set("rotX", fmtDeg(THREE.MathUtils.radToDeg(_euler.x)));
   set("rotY", fmtDeg(THREE.MathUtils.radToDeg(_euler.y)));
   set("rotZ", fmtDeg(THREE.MathUtils.radToDeg(_euler.z)));
-  set("scaleU", fmtScale(m.scale.x));
+  set("scaleX", fmtScale(m.scale.x)); set("scaleY", fmtScale(m.scale.y)); set("scaleZ", fmtScale(m.scale.z));
+  const row = $("scaleRow"); if (row) row.classList.toggle("uni", scaleUniform);
 }
 
-// commit a typed position coordinate
+// commit a typed position coordinate (absolute fields drive a single selection only)
 function commitPartCoord(axis) {
-  if (!selectedId) return;
+  if (selectedIds.length !== 1) return;
   const p = partById(selectedId); if (!p) return;
   const v = parseFloat($("pos" + axis.toUpperCase()).value);
   if (isFinite(v)) { p.mesh.position[axis] = v; afterCoordEdit(p); }
@@ -893,7 +977,7 @@ function commitPartCoord(axis) {
 
 // commit typed rotation (Euler XYZ degrees, rebuilt from all three fields)
 function commitPartRot() {
-  if (!selectedId) return;
+  if (selectedIds.length !== 1) return;
   const p = partById(selectedId); if (!p) return;
   const rx = parseFloat($("rotX").value), ry = parseFloat($("rotY").value), rz = parseFloat($("rotZ").value);
   if (isFinite(rx) && isFinite(ry) && isFinite(rz)) {
@@ -904,21 +988,164 @@ function commitPartRot() {
   updatePartCoords();
 }
 
-// commit typed uniform scale (overall, applied to all axes)
-function commitPartScale() {
-  if (!selectedId) return;
+// commit a typed scale axis. When "uniform" is locked, one field drives all three;
+// unlocked, each axis is independent (non-uniform scale round-trips via serializeState).
+let scaleUniform = true;
+function commitPartScale(axis) {
+  if (selectedIds.length !== 1) return;
   const p = partById(selectedId); if (!p) return;
-  const s = parseFloat($("scaleU").value);
-  if (isFinite(s) && s > 0) { p.mesh.scale.set(s, s, s); afterCoordEdit(p); }
+  const v = parseFloat($("scale" + axis.toUpperCase()).value);
+  if (isFinite(v) && v > 0) {
+    if (scaleUniform) p.mesh.scale.set(v, v, v); else p.mesh.scale[axis] = v;
+    afterCoordEdit(p);
+  }
+  updatePartCoords();
+}
+
+// toggle the X/Y/Z uniform-scale lock; re-locking snaps Y/Z to the current X
+function toggleScaleUniform() {
+  scaleUniform = !scaleUniform;
+  $("scaleLink").classList.toggle("on", scaleUniform);
+  $("scaleLink").setAttribute("aria-pressed", String(scaleUniform));
+  if (scaleUniform && selectedIds.length === 1) {
+    const p = primaryPart();
+    if (p) { const s = p.mesh.scale.x; p.mesh.scale.set(s, s, s); afterCoordEdit(p); }
+  }
   updatePartCoords();
 }
 
 // shared follow-up after any typed transform edit
 function afterCoordEdit(p) {
   p.mesh.updateMatrixWorld(true);
+  afterGroupEdit();
+}
+
+// follow-up after any programmatic transform change (typed, nudge, floor, reset, CoM):
+// keeps section, reset UI, markers, readouts and the multi-select pivot in sync
+function afterGroupEdit() {
   if (state.section.on) buildSection();
   updateXformResetUI();
   refreshMarkers();
+  updatePartCoords();
+  refreshObjInfo();
+  if (xformMode) updateGizmoAttachment();
+}
+
+/* ---- nudge (relative move / rotate by typed delta) + placement actions ------ */
+const _IDENT_QUAT = new THREE.Quaternion();   // never mutated
+const _ZERO_V3 = new THREE.Vector3();         // never mutated
+
+function captureSelectionPoses() {
+  return getSelectedParts().map((p) => ({ p, pos: p.mesh.position.clone(), quat: p.mesh.quaternion.clone() }));
+}
+const nudgeVal = (id) => { const v = parseFloat($(id).value); return isFinite(v) ? v : 0; };
+
+function applyNudgeMove() {
+  const starts = captureSelectionPoses();
+  if (!starts.length) { toast("Select a part first"); return; }
+  const d = new THREE.Vector3(nudgeVal("ndX"), nudgeVal("ndY"), nudgeVal("ndZ"));
+  if (d.lengthSq() === 0) return;
+  applyGroupDelta(starts, d, _IDENT_QUAT, _ZERO_V3);
+  afterGroupEdit();
+}
+
+function applyNudgeRot() {
+  const starts = captureSelectionPoses();
+  if (!starts.length) { toast("Select a part first"); return; }
+  const rx = nudgeVal("ndRX"), ry = nudgeVal("ndRY"), rz = nudgeVal("ndRZ");
+  if (!rx && !ry && !rz) return;
+  _euler.set(THREE.MathUtils.degToRad(rx), THREE.MathUtils.degToRad(ry), THREE.MathUtils.degToRad(rz), "XYZ");
+  const dq = new THREE.Quaternion().setFromEuler(_euler);
+  // revolve about the selection centroid (a single part spins about its own pivot)
+  const pivot = new THREE.Vector3();
+  starts.forEach((s) => pivot.add(s.pos));
+  pivot.multiplyScalar(1 / starts.length);
+  applyGroupDelta(starts, _ZERO_V3, dq, pivot);
+  afterGroupEdit();
+}
+
+// drop the whole selection so the combined world-space bbox rests on the floor grid
+// (Y=0). One shared delta preserves the parts' relative offsets (assembly drop).
+function placeSelectionOnFloor() {
+  const sel = getSelectedParts();
+  if (!sel.length) { toast("Select a part first"); return; }
+  const box = new THREE.Box3();
+  let any = false;
+  sel.forEach((p) => {
+    p.mesh.updateMatrixWorld(true);
+    const b = new THREE.Box3().setFromObject(p.mesh);
+    if (!b.isEmpty()) { box.union(b); any = true; }
+  });
+  if (!any) return;
+  // world drop → modelRoot-space delta (modelRoot carries only the up-axis rotation)
+  const localDelta = new THREE.Vector3(0, -box.min.y, 0)
+    .applyQuaternion(modelRoot.quaternion.clone().invert());
+  sel.forEach((p) => { p.mesh.position.add(localDelta); p.mesh.updateMatrixWorld(true); });
+  afterGroupEdit();
+}
+
+/* ---- Origin → centre of mass (pivot-only re-origin) ------------------------ */
+// area-weighted surface centroid of a BufferGeometry, in geometry-local space
+function geometryCentroid(g) {
+  const pos = g.attributes.position;
+  if (!pos) return new THREE.Vector3();
+  const idx = g.index;
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  const ab = new THREE.Vector3(), ac = new THREE.Vector3();
+  const acc = new THREE.Vector3();
+  let total = 0;
+  const triCount = Math.floor((idx ? idx.count : pos.count) / 3);
+  for (let t = 0; t < triCount; t++) {
+    const i0 = idx ? idx.getX(t * 3) : t * 3;
+    const i1 = idx ? idx.getX(t * 3 + 1) : t * 3 + 1;
+    const i2 = idx ? idx.getX(t * 3 + 2) : t * 3 + 2;
+    a.fromBufferAttribute(pos, i0); b.fromBufferAttribute(pos, i1); c.fromBufferAttribute(pos, i2);
+    const area = ab.subVectors(b, a).cross(ac.subVectors(c, a)).length() / 2;
+    if (area > 0) { acc.addScaledVector(a.add(b).add(c), area / 3); total += area; }
+  }
+  if (total > 0) return acc.divideScalar(total);
+  if (!g.boundingBox) g.computeBoundingBox();
+  return g.boundingBox ? g.boundingBox.getCenter(new THREE.Vector3()) : new THREE.Vector3();
+}
+
+// Move one part's origin/pivot to its centre of mass WITHOUT moving it visually:
+// the geometry shifts by −c and every pose layer is compensated with its OWN
+// rotation/scale, so partMoved()/reset stay exact and saves need no new deltas.
+// The cumulative shift is persisted as part.origin and re-applied below the
+// loader layer on load (see registerObject) — file bytes stay pristine.
+function centerPartOrigin(p) {
+  const c = geometryCentroid(p.mesh.geometry);
+  if (c.lengthSq() < XFORM_EPS * XFORM_EPS) return false;   // already centred
+  p.mesh.geometry.translate(-c.x, -c.y, -c.z);
+  p.mesh.geometry.computeBoundingBox();
+  p.mesh.geometry.boundingSphere = null;
+  const comp = (q, s) => c.clone().multiply(s).applyQuaternion(q);
+  p.loaderPos.add(comp(p.loaderQuat, p.loaderScale));
+  p.basePos.add(comp(p.baseQuat, p.baseScale));
+  p.mesh.position.add(comp(p.mesh.quaternion, p.mesh.scale));
+  p.mesh.updateMatrixWorld(true);
+  p.origin = (p.origin || new THREE.Vector3()).add(c);      // cumulative geometry-space shift
+  // bound marker points are stored mesh-local (= geometry space): shift with the geometry
+  state.measurements.forEach((m) => {
+    if (m.aPart === p.id && m.aLocal) m.aLocal.sub(c);
+    if (m.bPart === p.id && m.bLocal) m.bLocal.sub(c);
+  });
+  state.annotations.forEach((a) => { if (a.part === p.id && a.pLocal) a.pLocal.sub(c); });
+  // LIGHT LAB edge overlay caches the old vertex positions — rebuild it
+  const le = p.mesh.userData.llEdges;
+  if (le) {
+    p.mesh.remove(le); le.geometry.dispose(); delete p.mesh.userData.llEdges;
+    if (LIGHT_LAB.edges) addPartEdges(p.mesh);
+  }
+  return true;
+}
+
+function centerSelectedOrigins() {
+  const sel = getSelectedParts();
+  if (!sel.length) { toast("Select a part first"); return; }
+  const n = sel.filter(centerPartOrigin).length;
+  afterGroupEdit();
+  toast(n ? "Origin moved to centre of mass" : "Origin already at centre of mass");
 }
 
 /* ----------------------------------------------------------------------------
@@ -980,6 +1207,8 @@ function onPointerUp(ev) {
 function handleClick(ev) {
   if (mode === "orbit") {
     const hit = pickPoint(ev);
+    // ctrl-click toggles a part in/out of the multi-selection; on empty space it keeps it
+    if (ev.ctrlKey || ev.metaKey) { if (hit) togglePartSelection(hit.object.userData.partId); return; }
     if (hit) selectPart(hit.object.userData.partId);
     else deselect();
     return;
@@ -1607,7 +1836,7 @@ function rebuildObjectsPanel() {
   }
   state.parts.forEach((p) => {
     const row = document.createElement("div");
-    row.className = "obj-row" + (p.id === selectedId ? " selected" : "") + (p.visible ? "" : " hidden-part");
+    row.className = "obj-row" + (isSelected(p.id) ? " selected" : "") + (p.visible ? "" : " hidden-part");
     row.dataset.id = p.id;
 
     // one swatch opens the appearance popover (color + finish + metalness);
@@ -1645,7 +1874,11 @@ function rebuildObjectsPanel() {
       row.appendChild(rst);
     }
     row.appendChild(eye);
-    row.addEventListener("click", () => selectPart(p.id, true));
+    row.addEventListener("click", (e) => {
+      if (e.ctrlKey || e.metaKey) togglePartSelection(p.id);
+      else if (e.shiftKey) selectRangeTo(p.id);
+      else selectPart(p.id, true);
+    });
     list.appendChild(row);
   });
   closeMatPopover();                       // anchors were just rebuilt; drop any open popover
@@ -1941,8 +2174,8 @@ function setPartMetal(id, mi, pct) {
   if (mats[mi]) mats[mi].metalness = v;
 }
 
-function highlightRow(id) {
-  document.querySelectorAll(".obj-row").forEach((r) => r.classList.toggle("selected", r.dataset.id === id));
+function highlightRows() {
+  document.querySelectorAll(".obj-row").forEach((r) => r.classList.toggle("selected", isSelected(r.dataset.id)));
   closeMatPopover();   // its anchor swatch may just have been hidden with the old selection
 }
 
@@ -1999,13 +2232,13 @@ function togglePartVisible(id) {
 
 function isolatePart() {
   if (!selectedId) { toast("Select a part to isolate"); return; }
-  state.parts.forEach((p) => { p.visible = (p.id === selectedId); p.mesh.visible = p.visible; });
+  state.parts.forEach((p) => { p.visible = isSelected(p.id); p.mesh.visible = p.visible; });
   rebuildObjectsPanel();
   if (state.section.on) buildSection();
 }
 function hideSelected() {
   if (!selectedId) return;
-  const p = partById(selectedId); if (p) { p.visible = false; p.mesh.visible = false; }
+  getSelectedParts().forEach((p) => { p.visible = false; p.mesh.visible = false; });
   rebuildObjectsPanel();
   if (state.section.on) buildSection();
 }
@@ -2022,7 +2255,8 @@ function refreshObjInfo() {
   const g = p.mesh.geometry; if (!g.boundingBox) g.computeBoundingBox();
   const s = g.boundingBox.getSize(new THREE.Vector3());
   const tris = g.index ? g.index.count / 3 : (g.attributes.position ? g.attributes.position.count / 3 : 0);
-  el.innerHTML = `<b>${escapeHtml(p.name)}</b><br><span class="dims">${fmt(s.x)} × ${fmt(s.y)} × ${fmt(s.z)} mm · ${Math.round(tris)} tris</span>`;
+  const more = selectedIds.length > 1 ? ` <span class="dims">(+${selectedIds.length - 1} more selected)</span>` : "";
+  el.innerHTML = `<b>${escapeHtml(p.name)}</b>${more}<br><span class="dims">${fmt(s.x)} × ${fmt(s.y)} × ${fmt(s.z)} mm · ${Math.round(tris)} tris</span>`;
 }
 
 /* ----------------------------------------------------------------------------
@@ -2090,6 +2324,8 @@ function serializeState() {
       if (p.rough && p.rough.some((r) => r != null)) o.rough = p.rough.map((r) => (r == null ? null : Math.round(r * 1000) / 1000));
       if (p.metal && p.metal.some((v) => v != null)) o.metal = p.metal.map((v) => (v == null ? null : Math.round(v * 1000) / 1000));
       const E2 = XFORM_EPS * XFORM_EPS;
+      // pivot shift ("Origin → CoM") — cumulative geometry-local offset re-applied at load
+      if (p.origin && p.origin.lengthSq() > E2) o.origin = p.origin.toArray();
       // baseline ("default") transform — stored as the offset from the pristine loader pose
       if (p.loaderPos && p.basePos.distanceToSquared(p.loaderPos) > E2) o.dpos = p.basePos.clone().sub(p.loaderPos).toArray();
       if (p.loaderQuat && p.baseQuat.angleTo(p.loaderQuat) > XFORM_EPS) o.dquat = p.baseQuat.toArray();
@@ -2844,7 +3080,19 @@ function wireUI() {
   };
   ["x", "y", "z"].forEach((axis) => wireXf("pos" + axis.toUpperCase(), () => commitPartCoord(axis)));
   ["X", "Y", "Z"].forEach((ax) => wireXf("rot" + ax, commitPartRot));
-  wireXf("scaleU", commitPartScale);
+  ["x", "y", "z"].forEach((axis) => wireXf("scale" + axis.toUpperCase(), () => commitPartScale(axis)));
+  $("scaleLink").addEventListener("click", toggleScaleUniform);
+
+  // nudge (relative move/rotate) — Enter or Apply re-applies the same delta, so the
+  // inputs are deliberately NOT blurred or cleared on commit
+  $("ndMove").addEventListener("click", applyNudgeMove);
+  $("ndRot").addEventListener("click", applyNudgeRot);
+  ["ndX", "ndY", "ndZ"].forEach((id) =>
+    $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); applyNudgeMove(); } }));
+  ["ndRX", "ndRY", "ndRZ"].forEach((id) =>
+    $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); applyNudgeRot(); } }));
+  $("btnFloor").addEventListener("click", placeSelectionOnFloor);
+  $("btnCenterCoM").addEventListener("click", centerSelectedOrigins);
 
   setupCollapsiblePanels();
   wireLightLab();   // LIGHT LAB (temporary)
@@ -2965,13 +3213,14 @@ function openInfo(forceOpen) {   // used by Menu → Edit; keep it pinned while 
 }
 
 function removeSelectedPart() {
-  if (!selectedId) { toast("Select a part first"); return; }
-  const i = state.parts.findIndex((p) => p.id === selectedId);
-  if (i < 0) return;
+  const sel = getSelectedParts();
+  if (!sel.length) { toast("Select a part first"); return; }
   detachGizmo();
-  modelRoot.remove(state.parts[i].mesh);
-  state.parts.splice(i, 1);
-  selectedId = null;
+  sel.forEach((p) => {
+    const i = state.parts.indexOf(p);
+    if (i >= 0) { modelRoot.remove(p.mesh); state.parts.splice(i, 1); }
+  });
+  selectedIds = []; selectedId = null;
   updateXformResetUI(); refreshInfoPanel();
   if (state.section.on) buildSection();
   if (state.parts.length === 0) showOverlay("empty");
@@ -2982,7 +3231,7 @@ function removeAllParts() {
   if (!confirm("Remove all parts from the view?")) return;
   detachGizmo();
   state.parts.forEach((p) => modelRoot.remove(p.mesh));
-  state.parts.length = 0; state.files.length = 0; selectedId = null;
+  state.parts.length = 0; state.files.length = 0; selectedId = null; selectedIds = [];
   clearMeasurements();
   state.annotations.slice().forEach((a) => removeAnnotation(a.id));
   teardownSection(); state.section.on = false; $("swSection").classList.remove("on");

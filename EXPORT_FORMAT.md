@@ -44,7 +44,8 @@ integration — no other change to the file is needed.
     { "fileId": "f1", "index": 0, "name": "Body 1", "color": 11515581, "visible": true,
       "colors": [13382451, 14522658],   // optional: one 0xRRGGBB per material group (multi-material OBJ/GLB)
       "rough": [0.1, null],             // optional: finish per group, 0 = high gloss .. 1 = matte; null = default
-      "metal": [null, 1] }              // optional: metalness per group, 0 = dielectric .. 1 = metal; null = default
+      "metal": [null, 1],               // optional: metalness per group, 0 = dielectric .. 1 = metal; null = default
+      "origin": [1.5, 0, -3.2] }        // optional: pivot shift ("Origin → CoM"), geometry-local mm; omit for none
   ],
   "measurements": [],                // optional
   "annotations": [],                 // optional: { "p":[x,y,z], "text":"…" }
@@ -90,6 +91,15 @@ Notes:
 - **`parts[].metal`** (optional) works the same way for metalness `0..1` (`0` =
   plastic/dielectric, `1` = metal; viewer default `0`). Interactive `.mtl` import
   seeds it from `Pm` (PBR metallic).
+- **`parts[].origin`** (optional) is the cumulative **pivot shift** written by the
+  viewer's "Origin → CoM" action: a geometry-local `[x,y,z]` (file units) that is
+  subtracted from the part's vertices at load, relocating the part's origin/pivot
+  (rotation + scale centre, position readout) without moving it visually — the
+  part's pose is compensated below all saved transform deltas, so `dpos`/`pos` etc.
+  apply unchanged. The embedded file bytes stay pristine: delete `origin` and the
+  part loads with its original CAD origin again. When `origin` is present, any
+  bound marker locals (`measurements[].aLocal`/`bLocal`, `annotations[].pLocal`)
+  are expressed in the **shifted** part-local space. Exporters normally omit this.
 - **`section.offsets`** are absolute **mm from the world origin** (the floor grid sits
   at the origin) along each file axis — a fixed datum, not a fraction of the bounding
   box, so the cut stays put as parts move/hide. Mark them with **`unit: "mm"`**. Use
