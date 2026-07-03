@@ -289,8 +289,15 @@ body{
 .obj-row{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:10px;cursor:pointer}
 .obj-row:hover{background:var(--tint-4)}
 .obj-row.selected{background:var(--tint-3);box-shadow:inset 0 0 0 2px var(--tint-1)}
-.obj-row .swatch{width:18px;height:18px;border-radius:5px;border:2px solid #fff;box-shadow:0 0 0 1px var(--g3);flex:none;cursor:pointer;overflow:hidden;position:relative}
-.obj-row .swatch input{position:absolute;inset:-6px;opacity:0;cursor:pointer}
+.obj-row .swatch,.mat-detail .swatch{width:18px;height:18px;border-radius:5px;border:2px solid #fff;box-shadow:0 0 0 1px var(--g3);flex:none;cursor:pointer;overflow:hidden;position:relative}
+.obj-row .swatch input,.mat-detail .swatch input{position:absolute;inset:-6px;opacity:0;cursor:pointer}
+/* per-material color + finish lines: revealed under the selected part's row only */
+.mat-detail{display:none;flex-direction:column;gap:2px;padding:2px 10px 8px 30px}
+.obj-row.selected + .mat-detail{display:flex}
+.mat-detail .mat-line{margin-top:2px;gap:8px}
+.mat-detail .mat-line input[type=range]{min-width:0}   /* let the slider shrink to the panel width */
+.mat-detail .swatch.mini{width:14px;height:14px;border-radius:4px;border-width:1px}
+.mat-detail .mat-val{font-size:11px;color:var(--text-muted);flex:none;width:30px;text-align:right;font-variant-numeric:tabular-nums}
 .obj-row .oname{flex:1;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .obj-row .oname[contenteditable=true]{background:#fff;box-shadow:inset 0 0 0 1px var(--tint-1);border-radius:5px;padding:1px 4px}
 /* edit mode: part names look like editable fields (dashed box + pencil) and rename on a single click */

@@ -32,6 +32,28 @@ emitBox("Base_Plate", boxVerts(0, 0, 0, 80, 80, 15));
 emitBox("Pillar",     boxVerts(25, 25, 15, 30, 30, 55));
 fs.writeFileSync(path.join(out, "two_blocks.obj"), obj);
 
+/* ---- OBJ with one body but three usemtl material groups + companion .mtl ---- */
+let tl = "# sample — one body, three material groups\nmtllib traffic_light.mtl\no Traffic_Light\n";
+let tlBase = 0;
+function emitLamp(mtl, verts) {
+  verts.forEach((v) => { tl += `v ${v[0]} ${v[1]} ${v[2]}\n`; });
+  tl += `usemtl ${mtl}\n`;
+  boxFaces.forEach((f) => { tl += `f ${f[0]+tlBase} ${f[1]+tlBase} ${f[2]+tlBase}\n`; });
+  tlBase += verts.length;
+}
+emitLamp("red",   boxVerts(-40, 100, 60, 25, 25, 25));
+emitLamp("amber", boxVerts(-40, 100, 30, 25, 25, 25));
+emitLamp("green", boxVerts(-40, 100, 0,  25, 25, 25));
+fs.writeFileSync(path.join(out, "traffic_light.obj"), tl);
+
+const mtl = [
+  "# sample material library", "",
+  "newmtl red",   "Kd 0.80 0.20 0.20", "Ns 900", "",   // high gloss
+  "newmtl amber", "Kd 0.87 0.60 0.13", "Ns 250", "",   // satin
+  "newmtl green", "Kd 0.20 0.67 0.33", "Ns 10", "",    // near matte
+].join("\n");
+fs.writeFileSync(path.join(out, "traffic_light.mtl"), mtl);
+
 /* ---- STL single body: a triangular wedge, offset in space ---- */
 function tri(a, b, c) {
   const u = [b[0]-a[0], b[1]-a[1], b[2]-a[2]];
@@ -55,4 +77,4 @@ stl += tri(P.dd, P.f, P.c);                           // rear triangle
 stl += "endsolid Wedge\n";
 fs.writeFileSync(path.join(out, "wedge.stl"), stl);
 
-console.log("samples written: two_blocks.obj, wedge.stl");
+console.log("samples written: two_blocks.obj, traffic_light.obj/.mtl, wedge.stl");

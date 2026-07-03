@@ -1,0 +1,13 @@
+# sample material library
+
+newmtl red
+Kd 0.80 0.20 0.20
+Ns 900
+
+newmtl amber
+Kd 0.87 0.60 0.13
+Ns 250
+
+newmtl green
+Kd 0.20 0.67 0.33
+Ns 10

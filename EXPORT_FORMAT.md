@@ -41,7 +41,9 @@ integration — no other change to the file is needed.
     }
   ],
   "parts": [                         // optional; omit to auto-name every mesh
-    { "fileId": "f1", "index": 0, "name": "Body 1", "color": 11515581, "visible": true }
+    { "fileId": "f1", "index": 0, "name": "Body 1", "color": 11515581, "visible": true,
+      "colors": [13382451, 14522658],   // optional: one 0xRRGGBB per material group (multi-material OBJ/GLB)
+      "rough": [0.1, null] }            // optional: finish per group, 0 = high gloss .. 1 = matte; null = default
   ],
   "measurements": [],                // optional
   "annotations": [],                 // optional: { "p":[x,y,z], "text":"…" }
@@ -71,6 +73,19 @@ Notes:
 - **`parts[].index`** is the 0-based order of the mesh within its file. For OBJ
   each `o`/`g` group is one part; for STL the whole file is one part.
 - **`parts[].color`** is an integer `0xRRGGBB` (e.g. `0xAEB4BD` = `11449533`).
+- **`parts[].colors`** (optional) is for a mesh with **multiple materials** (OBJ
+  `usemtl` groups or GLB primitives): an array of `0xRRGGBB` ints, one per material
+  group in file order. When present it overrides `color`; `color` remains the
+  single-color fallback older viewers use. Omit it for single-material parts.
+  When importing interactively, dropping the `.mtl` alongside the `.obj` seeds
+  these colors from the MTL's `Kd` values; without one, distinct palette colors
+  are auto-assigned per group.
+- **`parts[].rough`** (optional) sets the surface finish per material group: an
+  array of roughness values `0..1` (`0` = high gloss / mirror-like, `1` = fully
+  matte), same order as `colors`; use `null` to keep the viewer default (`0.6`)
+  for a group. A single-material part uses a one-element array (a bare number is
+  also accepted). Interactive `.mtl` import seeds these from `Pr` (PBR roughness)
+  or `Ns` (specular exponent, mapped `roughness = 1 - sqrt(Ns/1000)`).
 - **`section.offsets`** are absolute **mm from the world origin** (the floor grid sits
   at the origin) along each file axis — a fixed datum, not a fraction of the bounding
   box, so the cut stays put as parts move/hide. Mark them with **`unit: "mm"`**. Use

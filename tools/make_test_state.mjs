@@ -24,11 +24,14 @@ const state = {
   files: [
     { id: "f1", name: "two_blocks.obj", format: "obj", enc: "deflate", data: b64(path.join(samples, "two_blocks.obj")) },
     { id: "f2", name: "wedge.stl", format: "stl", enc: "deflate", data: b64(path.join(samples, "wedge.stl")) },
+    { id: "f3", name: "traffic_light.obj", format: "obj", enc: "deflate", data: b64(path.join(samples, "traffic_light.obj")) },
   ],
   parts: [
     { fileId: "f1", index: 0, name: "Base Plate", color: 0xbfc4cb, visible: true },
     { fileId: "f1", index: 1, name: "Pillar", color: 0xe8a23f, visible: true },
     { fileId: "f2", index: 0, name: "Wedge", color: 0x8a5fc9, visible: true },
+    // multi-material part: per-usemtl-group colors + finish persisted (no .mtl needed at load)
+    { fileId: "f3", index: 0, name: "Traffic Light", color: 0xcc3333, colors: [0xcc3333, 0xdd9922, 0x33aa55], rough: [0.05, null, 0.9], visible: true },
   ],
   measurements: [],
   annotations: [{ p: [40, 40, 70], text: "Pillar top" }],

@@ -408,6 +408,50 @@ function makePartMaterial(colorHex) {
   });
 }
 
+/* fallback colors for multi-material groups when no .mtl (or glTF color) supplies one */
+const GROUP_PALETTE = [0x5b8db8, 0xc46a4f, 0x7ca86b, 0xb89a4e, 0x8a6fb5, 0x4fa8a0, 0xb56f8d, 0x9aa04e];
+
+/* a part mesh may carry one material or an array (one per usemtl/material group) */
+function matArray(mesh) { return Array.isArray(mesh.material) ? mesh.material : [mesh.material]; }
+
+/* the persisted color for material group mi of part p (falls back to the part color) */
+function partColorAt(p, mi) { return (p.colors && p.colors[mi] != null) ? p.colors[mi] : p.color; }
+
+/* the explicit roughness for material group mi of part p (null/absent = global default) */
+function partRoughAt(p, mi) { return (p.rough && p.rough[mi] != null) ? p.rough[mi] : MAT.roughness; }
+
+/* minimal .mtl parser -> { materialName: { color: 0xRRGGBB|null, rough: 0..1|null } }
+   Kd = diffuse color; finish comes from Pr (PBR roughness, wins) or Ns (specular
+   exponent 0..1000, mapped to roughness like the glTF converters do). */
+function parseMTL(text) {
+  const out = {};
+  let cur = null;
+  const clamp01 = (v) => Math.max(0, Math.min(1, v));
+  text.split(/\r?\n/).forEach((line) => {
+    line = line.trim();
+    if (!line || line.startsWith("#")) return;
+    const sp = line.indexOf(" ");
+    if (sp < 0) return;
+    const key = line.slice(0, sp).toLowerCase();
+    const rest = line.slice(sp + 1).trim();
+    if (key === "newmtl") { cur = out[rest] = { color: null, rough: null }; }
+    else if (key === "kd" && cur) {
+      const c = rest.split(/\s+/).map(parseFloat);
+      if (c.length >= 3 && c.every((v) => isFinite(v))) {
+        const b = (v) => Math.max(0, Math.min(255, Math.round(v * 255)));
+        cur.color = (b(c[0]) << 16) | (b(c[1]) << 8) | b(c[2]);
+      }
+    } else if (key === "pr" && cur) {
+      const v = parseFloat(rest);
+      if (isFinite(v)) { cur.rough = clamp01(v); cur.hasPr = true; }
+    } else if (key === "ns" && cur && !cur.hasPr) {
+      const v = parseFloat(rest);
+      if (isFinite(v)) cur.rough = clamp01(1 - Math.sqrt(Math.max(0, Math.min(1000, v)) / 1000));
+    }
+  });
+  return out;
+}
+
 /* ----------------------------------------------------------------------------
    Loading models
 ---------------------------------------------------------------------------- */
@@ -423,12 +467,41 @@ function formatFromName(name) {
   return null;
 }
 
+/* pick the .mtl library for an OBJ: mtllib reference -> same basename -> sole candidate */
+function resolveMtlLib(objText, objName, mtlMap) {
+  if (!mtlMap) return null;
+  const names = Object.keys(mtlMap);
+  if (names.length === 0) return null;
+  const base = (s) => s.trim().replace(/^.*[\\/]/, "").toLowerCase();
+  let m;
+  const re = /^[ \t]*mtllib[ \t]+(.+)$/gm;
+  while ((m = re.exec(objText))) {
+    const lib = mtlMap[base(m[1])];
+    if (lib) return lib;
+  }
+  const twin = mtlMap[base(objName || "").replace(/\.obj$/, ".mtl")];
+  if (twin) return twin;
+  return names.length === 1 ? mtlMap[names[0]] : null;
+}
+
 /* parse raw bytes -> THREE.Object3D (group of meshes), async via callback */
-function parseModel(format, buffer, done) {
+function parseModel(format, buffer, done, opts) {
+  opts = opts || {};
   try {
     if (format === "obj") {
       const text = new TextDecoder().decode(buffer);
-      done(objLoader.parse(text));
+      const group = objLoader.parse(text);
+      // OBJLoader names each created material after its usemtl statement; map those
+      // names through the companion .mtl (if one was imported) to per-group colors.
+      const lib = resolveMtlLib(text, opts.name, opts.mtlMap);
+      if (lib) group.traverse((c) => {
+        if (c.isMesh) {
+          const mats = matArray(c);
+          c.userData.mtlColors = mats.map((mat) => (mat.name in lib ? lib[mat.name].color : null));
+          c.userData.mtlRough = mats.map((mat) => (mat.name in lib ? lib[mat.name].rough : null));
+        }
+      });
+      done(group);
     } else if (format === "stl") {
       const geo = stlLoader.parse(buffer);
       const g = new THREE.Group(); g.add(new THREE.Mesh(geo, makePartMaterial(NEUTRAL_COLOR)));
@@ -440,7 +513,7 @@ function parseModel(format, buffer, done) {
 }
 
 /* register a parsed object's meshes as parts under modelRoot */
-function registerObject(object3d, fileId, metaParts) {
+function registerObject(object3d, fileId, metaParts, format) {
   const meshes = [];
   object3d.updateMatrixWorld(true);
   object3d.traverse((c) => { if (c.isMesh && c.geometry) meshes.push(c); });
@@ -452,8 +525,31 @@ function registerObject(object3d, fileId, metaParts) {
     mesh.matrixAutoUpdate = true;
 
     const pm = metaParts && metaParts[i];
-    const color = pm && pm.color != null ? pm.color : NEUTRAL_COLOR;
-    mesh.material = makePartMaterial(color);
+    // multi-material mesh (usemtl groups / glTF primitives): keep one part but one
+    // makePartMaterial per group, unless a legacy save carries only a single color.
+    const src = Array.isArray(mesh.material) ? mesh.material : null;
+    const legacySingle = pm && !pm.colors && pm.color != null;
+    const mtlColors = mesh.userData.mtlColors;
+    let color, colors = null;
+    if (src && src.length > 1 && !legacySingle) {
+      colors = src.map((sm, mi) => {
+        if (pm && pm.colors && pm.colors[mi] != null) return pm.colors[mi];
+        if (mtlColors && mtlColors[mi] != null) return mtlColors[mi];
+        if (format === "glb" && sm.color) return sm.color.getHex();
+        return GROUP_PALETTE[mi % GROUP_PALETTE.length];
+      });
+      mesh.material = colors.map((c, mi) => {
+        const m = makePartMaterial(c);
+        m.name = src[mi].name || "";
+        return m;
+      });
+      color = colors[0];
+    } else {
+      color = pm && pm.color != null ? pm.color
+        : (mtlColors && mtlColors[0] != null) ? mtlColors[0]
+        : NEUTRAL_COLOR;
+      mesh.material = makePartMaterial(color);
+    }
     mesh.userData.baseColor = color;
 
     const part = {
@@ -465,6 +561,21 @@ function registerObject(object3d, fileId, metaParts) {
       mesh,
       visible: pm ? pm.visible !== false : true,
     };
+    if (colors) part.colors = colors;
+    // per-group finish: explicit roughness overrides (saved state or .mtl Ns/Pr);
+    // entries left null keep the global MAT.roughness default
+    {
+      const pmRough = pm && pm.rough != null ? (Array.isArray(pm.rough) ? pm.rough : [pm.rough]) : null;
+      const mtlRough = mesh.userData.mtlRough;
+      const mats = matArray(mesh);
+      const rough = mats.map((m, mi) => {
+        let r = (pmRough && pmRough[mi] != null) ? pmRough[mi]
+          : (mtlRough && mtlRough[mi] != null) ? mtlRough[mi] : null;
+        if (r != null) { r = Math.max(0, Math.min(1, r)); m.roughness = r; }
+        return r;
+      });
+      if (rough.some((r) => r != null)) part.rough = rough;
+    }
     mesh.userData.partId = part.id;
     mesh.visible = part.visible;
     mesh.castShadow = true;       // each part shadows itself and the others
@@ -472,7 +583,7 @@ function registerObject(object3d, fileId, metaParts) {
     modelRoot.add(mesh);
 
     // LIGHT LAB: inherit the active exploration look on parts loaded while it's on
-    if (LIGHT_LAB.clay) mesh.material.color.set(CLAY_COLOR);
+    if (LIGHT_LAB.clay) matArray(mesh).forEach((m) => m.color.set(CLAY_COLOR));
     if (LIGHT_LAB.edges) addPartEdges(mesh);
 
     // Two transform layers (see serializeState):
@@ -521,7 +632,7 @@ function addFile(name, buffer, opts) {
         catch (e) { console.error("deflate failed, storing raw", name, e); fileRec.data = abToB64(buffer); }
         state.files.push(fileRec);
       }
-      const n = registerObject(object, fileId, opts.metaParts);
+      const n = registerObject(object, fileId, opts.metaParts, format);
       if (n === 0) toast("No geometry found in " + name);
 
       if (!state.meta.title) {
@@ -531,7 +642,7 @@ function addFile(name, buffer, opts) {
         state.meta.exportDate = todayStr();
       }
       resolve(true);
-    });
+    }, { name, mtlMap: opts.mtlMap });
   });
 }
 
@@ -544,13 +655,12 @@ function selectPart(id, fromList) {
   if (id && id === selectedId) { deselect(); return; }  // clicking again toggles off
   if (selectedId) {
     const prev = partById(selectedId);
-    if (prev) prev.mesh.material.emissive.setHex(0x000000);
+    if (prev) matArray(prev.mesh).forEach((m) => m.emissive.setHex(0x000000));
   }
   selectedId = id;
   const p = partById(id);
   if (p) {
-    p.mesh.material.emissive.setHex(SELECT_EMIS);
-    p.mesh.material.emissiveIntensity = 0.35;
+    matArray(p.mesh).forEach((m) => { m.emissive.setHex(SELECT_EMIS); m.emissiveIntensity = 0.35; });
   }
   if (xformMode) { if (p) attachGizmo(id); else detachGizmo(); }
   refreshObjInfo();
@@ -560,7 +670,7 @@ function selectPart(id, fromList) {
 function deselect() {
   if (selectedId) {
     const p = partById(selectedId);
-    if (p) p.mesh.material.emissive.setHex(0x000000);
+    if (p) matArray(p.mesh).forEach((m) => m.emissive.setHex(0x000000));
   }
   selectedId = null;
   detachGizmo();
@@ -1339,10 +1449,12 @@ function teardownSection() {
   if (stencilGroup) { scene.remove(stencilGroup); stencilGroup = null; }
   if (capMesh) { scene.remove(capMesh); capMesh = null; }
   state.parts.forEach((p) => {
-    if (p.mesh.material.clippingPlanes && p.mesh.material.clippingPlanes.length) {
-      p.mesh.material.clippingPlanes = [];
-      p.mesh.material.needsUpdate = true;
-    }
+    matArray(p.mesh).forEach((m) => {
+      if (m.clippingPlanes && m.clippingPlanes.length) {
+        m.clippingPlanes = [];
+        m.needsUpdate = true;
+      }
+    });
   });
 }
 
@@ -1355,9 +1467,11 @@ function buildSection() {
 
   // assign clipping to all part materials (and their edge lines)
   state.parts.forEach((p) => {
-    p.mesh.material.clippingPlanes = [sectionPlane];
-    p.mesh.material.clipShadows = true;
-    p.mesh.material.needsUpdate = true;
+    matArray(p.mesh).forEach((m) => {
+      m.clippingPlanes = [sectionPlane];
+      m.clipShadows = true;
+      m.needsUpdate = true;
+    });
   });
 
   // stencil groups for caps
@@ -1486,12 +1600,21 @@ function rebuildObjectsPanel() {
     row.className = "obj-row" + (p.id === selectedId ? " selected" : "") + (p.visible ? "" : " hidden-part");
     row.dataset.id = p.id;
 
-    const sw = document.createElement("label"); sw.className = "swatch";
-    sw.style.background = "#" + new THREE.Color(p.color).getHexString();
-    const ci = document.createElement("input"); ci.type = "color"; ci.value = "#" + new THREE.Color(p.color).getHexString();
-    ci.addEventListener("input", (e) => setPartColor(p.id, e.target.value));
-    ci.addEventListener("click", (e) => e.stopPropagation());
-    sw.appendChild(ci);
+    let sw;
+    if (p.colors && p.colors.length > 1) {
+      // multi-material part: the row icon is a gradient of the group colors;
+      // individual pickers live in the detail block shown on selection
+      sw = document.createElement("div"); sw.className = "swatch multi";
+      sw.style.background = partGradientCSS(p);
+      sw.title = "Multi-material — select to edit colors";
+    } else {
+      sw = document.createElement("label"); sw.className = "swatch";
+      sw.style.background = "#" + new THREE.Color(p.color).getHexString();
+      const ci = document.createElement("input"); ci.type = "color"; ci.value = "#" + new THREE.Color(p.color).getHexString();
+      ci.addEventListener("input", (e) => setPartColor(p.id, e.target.value));
+      ci.addEventListener("click", (e) => e.stopPropagation());
+      sw.appendChild(ci);
+    }
 
     const nm = document.createElement("div"); nm.className = "oname"; nm.textContent = p.name;
     nm.title = editMode ? "Click to rename" : p.name;
@@ -1520,7 +1643,62 @@ function rebuildObjectsPanel() {
     row.appendChild(eye);
     row.addEventListener("click", () => selectPart(p.id, true));
     list.appendChild(row);
+    list.appendChild(buildMatDetail(p));   // gloss sliders; CSS shows it only while the row is selected
   });
+}
+
+/* hard-stop gradient of the group colors, used as the multi-material row icon */
+function partGradientCSS(p) {
+  const n = p.colors.length;
+  const stops = p.colors.map((c, i) => {
+    const hex = "#" + new THREE.Color(c).getHexString();
+    return `${hex} ${Math.round(i * 100 / n)}% ${Math.round((i + 1) * 100 / n)}%`;
+  });
+  return `linear-gradient(135deg, ${stops.join(", ")})`;
+}
+
+/* per-material finish panel under a part row: color picker + gloss slider per group */
+function buildMatDetail(p) {
+  const det = document.createElement("div");
+  det.className = "mat-detail";
+  det.dataset.id = p.id;
+  const mats = matArray(p.mesh);
+  mats.forEach((m, mi) => {
+    const line = document.createElement("div"); line.className = "slider-row mat-line";
+
+    const s = document.createElement("label"); s.className = "swatch mini";
+    s.dataset.mi = mi;
+    s.style.background = "#" + new THREE.Color(partColorAt(p, mi)).getHexString();
+    s.title = (mats.length > 1 && m && m.name) || "Color";
+    const inp = document.createElement("input"); inp.type = "color";
+    inp.value = "#" + new THREE.Color(partColorAt(p, mi)).getHexString();
+    inp.addEventListener("input", (e) => setPartMaterialColor(p.id, mi, e.target.value));
+    inp.addEventListener("click", (e) => e.stopPropagation());
+    s.appendChild(inp);
+
+    const sl = document.createElement("input");
+    sl.type = "range"; sl.min = 0; sl.max = 100; sl.step = 1;
+    sl.value = Math.round((1 - partRoughAt(p, mi)) * 100);
+    sl.title = "Finish: 0% = matte, 100% = high gloss";
+    const val = document.createElement("span"); val.className = "mat-val";
+    val.textContent = sl.value + "%";
+    sl.addEventListener("input", () => { setPartGloss(p.id, mi, +sl.value); val.textContent = sl.value + "%"; });
+    sl.addEventListener("click", (e) => e.stopPropagation());
+
+    line.appendChild(s); line.appendChild(sl); line.appendChild(val);
+    det.appendChild(line);
+  });
+  return det;
+}
+
+/* set the finish of one material group: gloss 0..100 -> roughness 1..0 */
+function setPartGloss(id, mi, gloss) {
+  const p = partById(id); if (!p) return;
+  const mats = matArray(p.mesh);
+  if (!p.rough) p.rough = mats.map(() => null);
+  const r = Math.max(0, Math.min(1, 1 - gloss / 100));
+  p.rough[mi] = r;
+  if (mats[mi]) mats[mi].roughness = r;
 }
 
 function highlightRow(id) {
@@ -1544,11 +1722,36 @@ function beginRenamePart(el, id) {
 function setPartColor(id, hex) {
   const p = partById(id); if (!p) return;
   p.color = parseInt(hex.replace("#", "0x"));
-  p.mesh.material.color.set(hex);
+  // paint the whole part: a multi-material part gets every group set to this color
+  if (p.colors) p.colors = p.colors.map(() => p.color);
+  matArray(p.mesh).forEach((m) => m.color.set(hex));
   p.mesh.userData.baseColor = p.color;
-  const row = document.querySelector('.obj-row[data-id="' + id + '"] .swatch');
-  if (row) row.style.background = hex;
+  refreshPartSwatches(p);
   refreshObjInfo();
+}
+
+/* recolor a single material group (multi-material part) or the whole part (single) */
+function setPartMaterialColor(id, mi, hex) {
+  const p = partById(id); if (!p) return;
+  if (!p.colors) { setPartColor(id, hex); return; }   // single material: same as the row swatch
+  p.colors[mi] = parseInt(hex.replace("#", "0x"));
+  const mats = matArray(p.mesh);
+  if (mats[mi]) mats[mi].color.set(hex);
+  p.color = p.colors[0];
+  p.mesh.userData.baseColor = p.color;
+  refreshPartSwatches(p);
+  refreshObjInfo();
+}
+
+/* keep the row icon (solid color or gradient) and the detail pickers in sync */
+function refreshPartSwatches(p) {
+  const row = document.querySelector('.obj-row[data-id="' + p.id + '"] .swatch');
+  if (row) row.style.background = (p.colors && p.colors.length > 1) ? partGradientCSS(p) : "#" + new THREE.Color(p.color).getHexString();
+  document.querySelectorAll('.mat-detail[data-id="' + p.id + '"] .swatch').forEach((s) => {
+    const hex = "#" + new THREE.Color(partColorAt(p, +s.dataset.mi)).getHexString();
+    s.style.background = hex;
+    const inp = s.querySelector("input"); if (inp) inp.value = hex;
+  });
 }
 
 function togglePartVisible(id) {
@@ -1645,6 +1848,10 @@ function serializeState() {
     files: state.files.map((f) => ({ id: f.id, name: f.name, format: f.format, enc: f.enc, data: f.data })),
     parts: state.parts.map((p) => {
       const o = { fileId: p.fileId, index: p.index, name: p.name, color: p.color, visible: p.visible };
+      // per-material-group colors (multi-material OBJ/GLB); `color` stays as the legacy fallback
+      if (p.colors && p.colors.length > 1) o.colors = p.colors.slice();
+      // per-group finish overrides (roughness 0..1); null entries = global default
+      if (p.rough && p.rough.some((r) => r != null)) o.rough = p.rough.map((r) => (r == null ? null : Math.round(r * 1000) / 1000));
       const E2 = XFORM_EPS * XFORM_EPS;
       // baseline ("default") transform — stored as the offset from the pristine loader pose
       if (p.loaderPos && p.basePos.distanceToSquared(p.loaderPos) > E2) o.dpos = p.basePos.clone().sub(p.loaderPos).toArray();
@@ -1770,12 +1977,21 @@ function finishLoad() {
    Drag & drop + import
 ---------------------------------------------------------------------------- */
 function readFilesAndAdd(fileList) {
-  const arr = Array.from(fileList).filter((f) => formatFromName(f.name));
-  if (arr.length === 0) { toast("No supported files (.obj .stl .glb)"); return; }
+  const all = Array.from(fileList);
+  const mtlFiles = all.filter((f) => /\.mtl$/i.test(f.name));
+  const arr = all.filter((f) => formatFromName(f.name));
+  if (arr.length === 0) {
+    toast(mtlFiles.length ? "Drop the .obj together with its .mtl" : "No supported files (.obj .stl .glb)");
+    return;
+  }
   showOverlay("loading");
-  let chain = Promise.resolve();
+  // read any .mtl companions first so .obj files can pick up their material colors
+  const mtlMap = {};
+  let chain = Promise.all(mtlFiles.map((f) =>
+    f.text().then((t) => { mtlMap[f.name.toLowerCase()] = parseMTL(t); }).catch(() => {})
+  ));
   arr.forEach((file) => {
-    chain = chain.then(() => file.arrayBuffer()).then((buf) => addFile(file.name, buf));
+    chain = chain.then(() => file.arrayBuffer()).then((buf) => addFile(file.name, buf, { mtlMap }));
   });
   chain.then(() => {
     rebuildObjectsPanel(); refreshInfoPanel();
@@ -2102,8 +2318,8 @@ function applyLightPreset(name) {
 }
 
 /* ---- material knobs ---- */
-function eachPartMaterial(fn) { state.parts.forEach((p) => { if (p.mesh.material) fn(p.mesh.material, p); }); }
-function setRoughness(v) { MAT.roughness = v; eachPartMaterial((m) => { m.roughness = v; }); refreshReadout(); }
+function eachPartMaterial(fn) { state.parts.forEach((p) => { matArray(p.mesh).forEach((m, mi) => { if (m) fn(m, p, mi); }); }); }
+function setRoughness(v) { MAT.roughness = v; eachPartMaterial((m, p, mi) => { if (!(p.rough && p.rough[mi] != null)) m.roughness = v; }); refreshReadout(); }
 function setMetalness(v) { MAT.metalness = v; eachPartMaterial((m) => { m.metalness = v; }); refreshReadout(); }
 function setFlatShading(on) {
   MAT.flat = on;
@@ -2111,7 +2327,7 @@ function setFlatShading(on) {
 }
 function setClay(on) {
   LIGHT_LAB.clay = on;
-  eachPartMaterial((m, p) => { m.color.set(on ? CLAY_COLOR : p.color); });
+  eachPartMaterial((m, p, mi) => { m.color.set(on ? CLAY_COLOR : partColorAt(p, mi)); });
 }
 
 /* ---- environment (image-based reflections) ---- */
