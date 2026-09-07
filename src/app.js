@@ -36,12 +36,19 @@ const GRID_ON_IMPORT = true;
    materialFinish  Show the Gloss + Metal sliders in a part's appearance popover.
                  Set false to ship a colour-only picker (finish still loads and
                  persists from saved state / .mtl; it just isn't user-editable).
+   multiColorImport  Import parts with several usemtl/primitive groups as true
+                 multi-colour parts (material array + per-group colours). Set
+                 false to collapse every imported part to a single colour — each
+                 part keeps one material and the appearance popover shows no
+                 group tabs. Saved states that already carry `colors` still load
+                 as multi-colour; this only governs freshly imported geometry.
 ---------------------------------------------------------------------------- */
 const DEV = {
   lightPanel:  true,
   lightPreset: "dramatic",
   env:         false,
   materialFinish: true,
+  multiColorImport: true,
 };
 
 const NEUTRAL_COLOR = 0x9099A2;      // default shaded part color (mid neutral grey)
@@ -555,9 +562,12 @@ function registerObject(object3d, fileId, metaParts, format) {
     // makePartMaterial per group, unless a legacy save carries only a single color.
     const src = Array.isArray(mesh.material) ? mesh.material : null;
     const legacySingle = pm && !pm.colors && pm.color != null;
+    // DEV.multiColorImport off collapses freshly imported multi-group geometry to a
+    // single colour; a saved state that already carries `colors` still loads as multi.
+    const forceSingle = !DEV.multiColorImport && !(pm && pm.colors);
     const mtlColors = mesh.userData.mtlColors;
     let color, colors = null;
-    if (src && src.length > 1 && !legacySingle) {
+    if (src && src.length > 1 && !legacySingle && !forceSingle) {
       colors = src.map((sm, mi) => {
         if (pm && pm.colors && pm.colors[mi] != null) return pm.colors[mi];
         if (mtlColors && mtlColors[mi] != null) return mtlColors[mi];
