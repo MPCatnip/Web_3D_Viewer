@@ -82,7 +82,9 @@
     <span class="brand-name" id="brandName">3D Viewer</span>
     <!-- ===== /BRAND LOGO ===== -->
     <div class="sep"></div>
-    <span id="modelName" class="model-name" spellcheck="false" title="Click to rename">Untitled model</span>
+    <span id="modelName" class="model-name" spellcheck="false">Untitled model</span>
+    <!-- only visible while Menu -> Edit is on: names what the field above is -->
+    <span id="mnEditTag" class="edit-tag">Model title</span>
   </div>
 
   <div class="topright">
@@ -358,12 +360,12 @@
   <div class="panel-head">Model information</div>
   <div class="divider"></div>
   <div class="info-body">
-    <div class="info-field"><div class="k">Title</div><div class="v"><input id="ifTitle" type="text" placeholder="Model title" readonly></div></div>
+    <div class="info-field"><div class="k">Title<span class="k-note">shown top-left</span></div><div class="v"><input id="ifTitle" type="text" placeholder="Model title" readonly></div></div>
     <div class="info-field"><div class="k">Description</div><div class="v"><textarea id="ifDesc" rows="2" placeholder="Short description" readonly></textarea></div></div>
     <div style="display: none;" class="info-field"><div class="k">Export date</div><div class="v" id="ifDate">—</div></div>
     <div class="info-field"><div class="k">Bounding box (mm)</div><div class="v dims" id="ifBBox">—</div></div>
     <div class="info-field"><div class="k">Copyright</div><div class="v" id="ifCopyright">—</div></div>
-    <div class="info-edit-hint" id="ifEditHint">Use <b>Menu → Edit</b> to rename the model and parts.</div>
+    <div class="info-edit-hint" id="ifEditHint">Use <b>Menu → Edit</b> to rename the model title — shown top-left — plus the description and part names.</div>
     <div class="info-edit-actions" id="ifEditActions">
       <button id="ifDiscard" class="btn">Discard</button>
       <button id="ifSave" class="btn btn-primary">Save</button>

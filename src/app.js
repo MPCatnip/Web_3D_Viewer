@@ -2315,7 +2315,7 @@ function refreshInfoPanel() {
     const s = box.getSize(new THREE.Vector3());
     $("ifBBox").textContent = `${fmt(s.x)} × ${fmt(s.y)} × ${fmt(s.z)}`;
   } else $("ifBBox").textContent = "—";
-  $("modelName").textContent = state.meta.title || "Untitled model";
+  setModelNameText(state.meta.title);
 }
 
 /* ----------------------------------------------------------------------------
@@ -3024,7 +3024,10 @@ function wireUI() {
   $("btnMenu").addEventListener("click", (e) => { e.stopPropagation(); toggleMenu(); });
   document.addEventListener("click", (e) => { if (!$("menu").contains(e.target) && e.target !== $("btnMenu")) closeMenu(); });
   $("miSave").addEventListener("click", saveFile);
-  $("miEdit").addEventListener("click", () => { closeMenu(); setEditMode(true); openInfo(true); $("ifTitle").focus(); });
+  $("miEdit").addEventListener("click", () => {
+    closeMenu(); setEditMode(true); openInfo(true); $("ifTitle").focus();
+    toast("Editing \u2014 the name in the top-left is the model title");
+  });
   $("miConfidential").addEventListener("click", addConfidentialNotice);
   $("miSaveXform").addEventListener("click", saveTransformsAsDefault);
   $("miRemoveXform").addEventListener("click", () => { closeMenu(); resetAllTransforms(); });
@@ -3114,21 +3117,52 @@ function wireUI() {
   infoPanelEl.addEventListener("mouseenter", () => clearTimeout(infoHideTimer));
   infoPanelEl.addEventListener("mouseleave", scheduleHideInfo);
   infoBtn.addEventListener("click", () => { infoPinned = !infoPinned; if (infoPinned) showInfo(); });
-  $("ifTitle").addEventListener("input", (e) => { state.meta.title = e.target.value; $("modelName").textContent = e.target.value || "Untitled model"; });
+  $("ifTitle").addEventListener("input", (e) => { state.meta.title = e.target.value; setModelNameText(e.target.value); });
+  // ring both ends while the Title field has focus: the top-bar name is this field
+  $("ifTitle").addEventListener("focus", () => linkTitleHighlight(true));
+  $("ifTitle").addEventListener("blur", () => linkTitleHighlight(false));
   $("ifDesc").addEventListener("input", (e) => { state.meta.description = e.target.value; });
   $("ifSave").addEventListener("click", commitEdit);
   $("ifDiscard").addEventListener("click", discardEdit);
   // NB: copyright is display-only and intentionally has no input handler.
 
-  // model name in the top bar — only editable while edit mode is on
+  // model name in the top bar — only editable while edit mode is on. It is the
+  // model *title*: edits mirror into the info panel's Title field as you type.
   const mn = $("modelName");
+  mn.title = "";                       // no rename tooltip until edit mode is on
   mn.addEventListener("click", () => {
     if (!editMode) return;
+    if (mn.getAttribute("contenteditable") === "true") return;   // already typing
+    if (!state.meta.title) mn.textContent = "";                  // drop the "Untitled model" placeholder
     mn.contentEditable = "true"; mn.focus();
     if (document.execCommand) document.execCommand("selectAll", false, null);
   });
-  mn.addEventListener("blur", () => { mn.contentEditable = "false"; state.meta.title = mn.textContent.trim(); $("ifTitle").value = state.meta.title; refreshInfoPanel(); });
+  mn.addEventListener("focus", () => linkTitleHighlight(true));
+  mn.addEventListener("input", () => { state.meta.title = mn.textContent.trim(); $("ifTitle").value = state.meta.title; });
+  mn.addEventListener("blur", () => {
+    mn.contentEditable = "false";
+    linkTitleHighlight(false);
+    state.meta.title = mn.textContent.trim();
+    setModelNameText(state.meta.title);   // empty falls back to the placeholder
+    $("ifTitle").value = state.meta.title;
+    refreshInfoPanel();
+  });
   mn.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); mn.blur(); } });
+}
+
+/* the top-bar name and the info panel's Title are one value — write it without
+   stomping the caret when the name itself is the field being typed into */
+function setModelNameText(title) {
+  const mn = $("modelName");
+  if (mn.getAttribute("contenteditable") === "true") return;
+  mn.textContent = title || "Untitled model";
+}
+
+/* ring the top-bar name and the Title field together, so editing either one
+   shows they are the same value */
+function linkTitleHighlight(on) {
+  $("modelName").classList.toggle("title-linked", !!on && editMode);
+  $("ifTitle").classList.toggle("title-linked", !!on && editMode);
 }
 
 let editMode = false;
@@ -3147,7 +3181,8 @@ function setEditMode(on) {
   $("ifTitle").readOnly = !on;
   $("ifDesc").readOnly = !on;
   $("miEdit").classList.toggle("active-item", on);
-  $("modelName").title = on ? "Click to rename" : "";
+  $("modelName").title = on ? "Model title — click to rename (also shown as Title in the info panel)" : "";
+  if (!on) linkTitleHighlight(false);
   rebuildObjectsPanel();   // refresh per-row rename affordance / tooltips
 }
 
@@ -3162,7 +3197,7 @@ function discardEdit() {                 // revert to the snapshot, leave edit m
     state.meta.title = editSnapshot.title;
     state.meta.description = editSnapshot.description;
     state.parts.forEach((p, i) => { if (editSnapshot.partNames[i] != null) p.name = editSnapshot.partNames[i]; });
-    $("modelName").textContent = state.meta.title || "Untitled model";
+    setModelNameText(state.meta.title);
     rebuildObjectsPanel();
   }
   editSnapshot = null;
