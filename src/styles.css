@@ -620,6 +620,18 @@ body.basic #btnImport,
 body.basic #btnMenu,
 body.basic #menu{ display:none !important; }
 
+/* ===== LOADING =====
+   While a model is being read/parsed (body.loading, toggled with the "loading"
+   overlay) hide all editing chrome so only the loading card shows — no panels
+   floating over the spinner, and no "No model loaded" copy flashing first. */
+body.loading .panel,
+body.loading #infoPanel,
+body.loading #xformBar,
+body.loading #xformPanel,
+body.loading #btnImport,
+body.loading #btnMenu,
+body.loading #menu{ display:none !important; }
+
 /* scrollbars */
 ::-webkit-scrollbar{width:9px;height:9px}
 ::-webkit-scrollbar-thumb{background:var(--g3);border-radius:9px;border:2px solid #fff}

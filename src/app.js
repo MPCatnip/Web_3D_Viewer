@@ -2594,8 +2594,14 @@ function setupDnD() {
 function showOverlay(which) {
   $("ovLoading").classList.toggle("show", which === "loading");
   $("ovEmpty").classList.toggle("show", which === "empty");
+  // While the loading card is up, hide the editing chrome (see body.loading in styles.css)
+  document.body.classList.toggle("loading", which === "loading");
 }
-function hideOverlay() { $("ovLoading").classList.remove("show"); $("ovEmpty").classList.remove("show"); }
+function hideOverlay() {
+  $("ovLoading").classList.remove("show");
+  $("ovEmpty").classList.remove("show");
+  document.body.classList.remove("loading");
+}
 
 let toastTimer = null;
 function toast(msg) { showHint(msg); clearTimeout(toastTimer); toastTimer = setTimeout(hideHint, 2600); }
