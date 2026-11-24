@@ -1,5 +1,6 @@
 # Regenerable demo/test build output
 test_embedded.html
+nx_export_viewer.py
 
 # Node
 node_modules/

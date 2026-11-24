@@ -277,6 +277,9 @@ body.editing .brand .edit-tag{display:inline-block}
 /* tools — keep natural height so a long parts list never squashes it */
 .tools{flex:0 0 auto}
 .tools .tool-group{padding:13px 14px}
+/* view panel — user-facing display controls; same natural-height + padding as tools */
+.viewpanel{flex:0 0 auto}
+.viewpanel .tool-group{padding:13px 14px}
 .tool-row{margin-top:6px;display:flex;gap:8px;flex-wrap:wrap}
 .tool-row .btn{font-size:12px;padding:7px 12px;flex:1 1 0;justify-content:center}
 .tool-row.chips{gap:7px;margin-top:10px}

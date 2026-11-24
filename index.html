@@ -129,18 +129,6 @@
         <span class="label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>Remove all parts</span>
         <span class="desc">Clear every part from the view.</span>
       </div>
-      <div class="divider"></div>
-      <div class="menu-toggle-row"><span class="label">Orientation (up axis)</span></div>
-      <div class="menu-sub" id="oriChips">
-        <span class="chip" data-axis="z+">Z+</span><span class="chip" data-axis="z-">Z−</span>
-        <span class="chip" data-axis="x+">X+</span><span class="chip" data-axis="x-">X−</span>
-        <span class="chip" data-axis="y+">Y+</span><span class="chip" data-axis="y-">Y−</span>
-      </div>
-      <div class="divider"></div>
-      <div class="menu-toggle-row">
-        <span class="label">Floor grid</span>
-        <span id="swGrid" class="switch"></span>
-      </div>
     </div>
   </div>
 </div>
@@ -240,6 +228,32 @@
     </div></div>
   </div>
 
+  <!-- ===== VIEW (regular-user display controls; orientation + grid moved here from the hamburger menu) ===== -->
+  <div class="panel viewpanel collapsible collapsed" data-panel="view">
+    <div class="panel-head"><span class="ph-title">View</span><svg class="collapse-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></div>
+    <div class="panel-body"><div class="pb-inner">
+    <div class="divider"></div>
+
+    <div class="tool-group">
+      <div class="field-label">Display</div>
+      <div class="toggle-row" data-toggle="view-edges"><span class="t-label">Edge overlay</span><span id="swEdgesView" class="switch"></span></div>
+      <div class="toggle-row" data-toggle="view-shadows"><span class="t-label">Shadows</span><span id="swShadowsView" class="switch on"></span></div>
+      <div class="toggle-row" data-toggle="view-grid"><span class="t-label">Floor grid</span><span id="swGrid" class="switch"></span></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="tool-group">
+      <div class="field-label">Orientation (up axis)</div>
+      <div class="tool-row chips" id="oriChips">
+        <span class="chip" data-axis="z+">Z+</span><span class="chip" data-axis="z-">Z−</span>
+        <span class="chip" data-axis="x+">X+</span><span class="chip" data-axis="x-">X−</span>
+        <span class="chip" data-axis="y+">Y+</span><span class="chip" data-axis="y-">Y−</span>
+      </div>
+    </div>
+    </div></div>
+  </div>
+
   <!-- ===== LIGHT LAB (DEVELOPER — lighting / material explorer; auto-stripped from the build when DEV.lightPanel is false in src/app.js) ===== -->
   <div class="panel lightlab collapsible collapsed" data-panel="lightlab">
     <div class="panel-head"><span class="ph-title">Light</span><span class="sub">experiment</span><svg class="collapse-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></div>
@@ -259,6 +273,7 @@
         <span class="chip ll-preset" data-preset="moonlight">Moonlight</span>
         <span class="chip ll-preset" data-preset="blueprint">Blueprint</span>
         <span class="chip ll-preset" data-preset="ember">Ember</span>
+        <span class="chip ll-preset" data-preset="showroom">Showroom</span>
       </div>
 
       <div class="ll-slider"><span class="ll-lbl">Key</span><input type="range" id="llKey" min="0" max="200" value="60"><span class="ll-val" id="llKeyV">0.60</span></div>
@@ -454,13 +469,7 @@
 
 <!--[[SCRIPTS]]-->
 <script src="src/brand.config.js"></script>
-<script src="vendor/three.min.js"></script>
-<script src="vendor/OrbitControls.js"></script>
-<script src="vendor/TransformControls.js"></script>
-<script src="vendor/OBJLoader.js"></script>
-<script src="vendor/STLLoader.js"></script>
-<script src="vendor/GLTFLoader.js"></script>
-<script src="vendor/CSS2DRenderer.js"></script>
+<script src="vendor/three-bundle.min.js"></script>
 <script src="vendor/pako.min.js"></script>
 <script src="src/app.js"></script>
 </body>

@@ -49,8 +49,17 @@ node tools/make_test_state.mjs # build a demo state from the samples
 node build.mjs tools/test_state.json   # -> test_embedded.html (demo)
 ```
 
-The build simply reads `index.html` and inlines `src/styles.css` and every
-`vendor/*.js` + `src/app.js` into a single document.
+The build reads `index.html` and inlines `src/styles.css`,
+`vendor/three-bundle.min.js`, `vendor/pako.min.js` and `src/app.js` into a
+single document. With the dev dependencies installed (`npm install`, one-time)
+it also minifies `app.js`; without them it still builds, just unminified.
+
+`vendor/three-bundle.min.js` is **generated** (and checked in): a tree-shaken
+three.js core containing only the members the app uses, plus minified copies of
+the example files (`vendor/OrbitControls.js` etc., which stay the source of
+truth). Regenerate it with `npm run vendor` after using a new `THREE.*` member
+in `src/app.js` or editing a vendor example file — `node build.mjs` errors if
+the bundle has gone stale.
 
 > **Note on inlining:** because the app re-saves itself by reproducing its own
 > source, the source must never contain a literal script-close tag or HTML
@@ -61,6 +70,7 @@ The build simply reads `index.html` and inlines `src/styles.css` and every
 
 ## Vendored libraries
 
-Three.js r137 (UMD) + `OBJLoader`, `STLLoader`, `GLTFLoader`, `OrbitControls`,
-`CSS2DRenderer` (the global-script builds), all under `vendor/` and inlined at
-build time. MIT licensed.
+Three.js r137 core (tree-shaken from the npm package by `tools/build_vendor.mjs`)
++ `OBJLoader`, `STLLoader`, `GLTFLoader`, `OrbitControls`, `TransformControls`,
+`CSS2DRenderer` (the checked-in global-script builds) + `pako`, all under
+`vendor/` and inlined at build time. MIT licensed.

@@ -1,0 +1,13 @@
+{
+  "name": "web-3d-viewer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "vendor": "node tools/build_vendor.mjs",
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "three": "~0.137.0"
+  }
+}

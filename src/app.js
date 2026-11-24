@@ -29,7 +29,8 @@ const GRID_ON_IMPORT = true;
    lightPreset   Lighting applied on load. Use null to keep the built-in
                  hand-tuned default, or one of LIGHT_PRESETS:
                  "studio" | "threePoint" | "soft" | "dramatic" | "top" |
-                 "coolShop" | "sunset" | "moonlight" | "blueprint" | "ember".
+                 "coolShop" | "sunset" | "moonlight" | "blueprint" | "ember" |
+                 "showroom" (high-contrast finish inspector; turns env on).
                  (Tune values live with the panel, then bake the winner here.)
    env           Boot with the procedural studio environment on (image-based
                  reflections). Needed for the Metal slider to read as metal.
@@ -79,6 +80,8 @@ const state = {
     upAxis: "z+",
     projection: "persp",
     gridOn: false,
+    edgesOn: false,     // View panel: edge overlay
+    shadowsOn: true,    // View panel: shadows
   },
   files: [],         // {id, name, format, data(base64)}
   parts: [],         // runtime: {id, fileId, index, name, color, mesh, visible}
@@ -134,6 +137,7 @@ function initThree() {
   controls.dampingFactor = 0.08;
   controls.rotateSpeed = 0.9;
   controls.zoomToCursor = true;
+  controls.addEventListener("change", invalidate);   // orbit/zoom/pan, incl. the damping tail
 
   // Per-part transform gizmo. Lives in the scene but stays detached/hidden until the
   // Objects panel "Transform parts" toggle attaches it to a selected part's mesh.
@@ -142,6 +146,7 @@ function initThree() {
   transformControls.setSpace("world");
   transformControls.setRotationSnap(null);   // free rotation; hold Shift to snap to 5° (see keydown/keyup)
   transformControls.addEventListener("dragging-changed", (e) => { controls.enabled = !e.value; });
+  transformControls.addEventListener("change", invalidate);   // gizmo hover highlight + drag repaints
   transformControls.addEventListener("mouseDown", onPartMoveStart);
   transformControls.addEventListener("objectChange", onPartMoving);
   transformControls.addEventListener("mouseUp", onPartMoveEnd);
@@ -196,7 +201,13 @@ function initThree() {
   renderer.domElement.addEventListener("pointerup", onPointerUp);
   renderer.domElement.addEventListener("pointermove", onPointerMoveHover);
 
-  animate();
+  // Render-on-demand catch-all: any user gesture may change what's on screen
+  // (capture phase, so it also schedules the frame BEFORE bubbling handlers that
+  // rely on "next rAF = rendered", e.g. the annotation-label focus).
+  ["pointerdown", "pointermove", "pointerup", "wheel", "keydown", "click", "dblclick", "input", "change", "drop"]
+    .forEach((ev) => window.addEventListener(ev, invalidate, { capture: true, passive: true }));
+
+  invalidate();   // first frame
 }
 
 function onResize() {
@@ -206,6 +217,8 @@ function onResize() {
   perspCam.aspect = w / h;
   perspCam.updateProjectionMatrix();
   updateOrthoFrustum();
+  updateEdgeResolution();   // fat-line edge overlay width is screen-space
+  invalidate();
 }
 
 /* Keep ortho frustum matching aspect; vertical half-size driven by orthoHalf. */
@@ -219,11 +232,24 @@ function updateOrthoFrustum() {
   orthoCam.updateProjectionMatrix();
 }
 
-function animate() {
-  requestAnimationFrame(animate);
-  controls.update();
+/* On-demand rendering: a frame is produced only when something may have changed —
+   invalidate() is fired by the controls' "change" events, a window-level input
+   catch-all (see initThree), and the async paths (model parsing, state load).
+   Idle = zero GPU work. An extra frame is harmless; a missed one leaves a stale
+   canvas, so new code paths that mutate the scene outside a user gesture must
+   call invalidate() themselves. */
+let _framePending = false;
+function invalidate() {
+  if (_framePending) return;
+  _framePending = true;
+  requestAnimationFrame(renderFrame);
+}
+function renderFrame() {
+  _framePending = false;
+  controls.update();         // damping keeps firing "change" (→ invalidate) until it settles
   updateMarkerScales();
   updateLightLab();          // LIGHT LAB: headlight follows the camera
+  if (LIGHT_LAB.spin) invalidate();   // LIGHT LAB: the light-orbit animation needs continuous frames
   renderer.render(scene, activeCam);
   labelRenderer.render(scene, activeCam);
 }
@@ -648,6 +674,7 @@ function registerObject(object3d, fileId, metaParts, format) {
 
     state.parts.push(part);
   });
+  invalidate();   // parsing is async — no user gesture fires when the meshes land
   return meshes.length;
 }
 
@@ -702,6 +729,7 @@ function applySelectionVisuals() {
   if (xformMode) updateGizmoAttachment();
   refreshObjInfo();
   highlightRows();
+  invalidate();
 }
 
 function selectPart(id, fromList) {
@@ -784,6 +812,7 @@ function nearestPartBinding(localVec) {
 function refreshMarkers() {
   state.measurements.forEach(updateMeasurementGeometry);
   state.annotations.forEach(refreshAnnotation);
+  invalidate();
 }
 
 /* ----------------------------------------------------------------------------
@@ -1704,7 +1733,13 @@ function teardownSection() {
         m.needsUpdate = true;
       }
     });
+    const ls = p.mesh.userData.llEdges;
+    if (ls && ls.material.clippingPlanes && ls.material.clippingPlanes.length) {
+      ls.material.clippingPlanes = [];
+      ls.material.needsUpdate = true;
+    }
   });
+  invalidate();
 }
 
 function buildSection() {
@@ -1714,13 +1749,16 @@ function buildSection() {
   // normal/constant are set by updateSectionGeometry below (it owns the flip);
   // everything here references the shared sectionPlane object, so it follows.
 
-  // assign clipping to all part materials (and their edge lines)
+  // assign clipping to all part materials AND their edge overlay lines, so the
+  // crease/silhouette lines are cut at the section plane instead of hanging past it.
   state.parts.forEach((p) => {
     matArray(p.mesh).forEach((m) => {
       m.clippingPlanes = [sectionPlane];
       m.clipShadows = true;
       m.needsUpdate = true;
     });
+    const ls = p.mesh.userData.llEdges;
+    if (ls) { ls.material.clippingPlanes = [sectionPlane]; ls.material.needsUpdate = true; }
   });
 
   // stencil groups for caps
@@ -1745,6 +1783,7 @@ function buildSection() {
 
   updateSectionGeometry();
   syncSecSlider();   // keep the knob tracking the (fixed) cut as the model extent changes
+  invalidate();
 }
 
 function updateSectionGeometry() {
@@ -1772,6 +1811,7 @@ function updateSectionGeometry() {
   // sits at the origin, so this reads directly against it. Leave the field alone while typing.
   const inp = $("secVal");
   if (document.activeElement !== inp) inp.value = fmt(d);
+  invalidate();
 }
 
 // mirror the active-axis offset onto the slider, then refresh the cut + read-out
@@ -2441,6 +2481,7 @@ function loadFromState(data) {
     $("secFlip").classList.toggle("active", state.section.flip);
     if (state.section.on) { $("swSection").classList.add("on"); syncChips(".secAxis", "axis", state.section.axis); buildSection(); }
     syncSecSlider();
+    invalidate();   // the whole load ran outside any user gesture
   });
 }
 
@@ -2452,6 +2493,8 @@ function finishLoad() {
   applyPanelStates(state.meta.panels);   // restore each panel's saved expand/collapse state
   setProjection(state.meta.projection || "persp");
   setGrid(!!state.meta.gridOn);
+  setEdges(!!state.meta.edgesOn);
+  setShadows(state.meta.shadowsOn !== false);   // default on when the field is absent (older saves)
   setView("iso");
   if (state.parts.length) hideOverlay(); else showOverlay("empty");
 }
@@ -2641,6 +2684,10 @@ const LIGHT_PRESETS = {
   moonlight:  { key:1.15, casterShare:0.42, fill:0.14, rim:0.40, az:50, el:30, exposure:1.0,  tonemap:"neutral", bg:"#F9FAFA", keyColor:0xbcd2ff, rimColor:0xdfeaff, hemiSky:0x4a5e80, hemiGround:0x0d1018 },
   blueprint:  { key:0.55, casterShare:0.18, fill:0.40, rim:0.70, az:35, el:45, exposure:1.0,  tonemap:"neutral", bg:"#F9FAFA", keyColor:0xeaf6ff, rimColor:0x49d6ff, hemiSky:0x86c8e6, hemiGround:0x0a1620 },
   ember:      { key:1.20, casterShare:0.40, fill:0.20, rim:0.50, az:40, el:18, exposure:1.0,  tonemap:"neutral", bg:"#F9FAFA", keyColor:0xff9a5a, rimColor:0x7fb6ff, hemiSky:0x5a3a2a, hemiGround:0x140c08 },
+  // Showroom: high-contrast finish inspector — the studio environment (ring of
+  // bright softboxes) ON over a dark background, low fill, so matte vs gloss
+  // separates sharply. The only preset that drives the env (via env/envIntensity).
+  showroom:   { key:0.75, casterShare:0.20, fill:0.28, rim:0.22, az:38, el:46, exposure:1.0,  tonemap:"neutral", bg:"#23282d", keyColor:0xffffff, rimColor:0xeaf0f6, hemiSky:0xdfe3e8, hemiGround:0x12151a, env:true, envIntensity:1.4 },
 };
 
 /* unit direction from azimuth (around up) + elevation (above horizon) */
@@ -2675,6 +2722,21 @@ function applyKeyDirection() {
 }
 function applyShadows() {
   if (keyLight) keyLight.castShadow = LIGHT_LAB.shadows;   // headlight now has a real offset, so its shadow is meaningful
+}
+/* Toggle the "on" class on two switch elements (the Light Lab copy + the View
+   panel copy) that mirror one piece of state. Either may be absent (the Light
+   Lab is stripped from production builds), so guard each. */
+function syncViewSwitch(idA, idB, on) {
+  [idA, idB].forEach((id) => { const e = $(id); if (e) e.classList.toggle("on", on); });
+}
+/* Shadows toggle — user-facing (View panel) and Light Lab, kept in sync. */
+function setShadows(on) {
+  LIGHT_LAB.shadows = on;
+  state.meta.shadowsOn = on;   // persisted view state (round-trips through Save file)
+  applyShadows();
+  syncViewSwitch("swShadows", "swShadowsView", on);
+  refreshReadout();
+  invalidate();
 }
 function applyExposure() { if (renderer) renderer.toneMappingExposure = LIGHT_LAB.exposure; }
 function applyToneMap() {
@@ -2795,9 +2857,13 @@ function applyLightPreset(name) {
   applyKeyIntensity(); applyFillIntensity(); applyKeyDirection();
   applyRim(); applyKeyColor(); applyRimColor(); applyHemiColors();
   applyExposure(); applyToneMap(); setBg(p.bg);
+  // A preset may opt into the studio environment (only Showroom does today);
+  // presets that omit the field leave the Environment toggle as the user left it.
+  if (p.env !== undefined) { setEnvironment(p.env); if (p.envIntensity != null) setEnvIntensity(p.envIntensity); }
   syncChips(".ll-preset", "preset", name);   // highlight the active preset (also when applied on boot)
   syncLightLabUI();
   refreshReadout();
+  invalidate();   // applied on boot too, outside any user gesture
 }
 
 /* ---- material knobs ---- */
@@ -2814,20 +2880,58 @@ function setClay(on) {
 }
 
 /* ---- environment (image-based reflections) ---- */
-/* Build a procedural studio environment once: a soft vertical gradient (bright
-   overhead softbox -> neutral horizon -> dark floor) baked through PMREM so metal
-   parts have something to reflect. Fully offline — no HDR file, core three only. */
+/* Build a procedural studio environment once: a mid-grey surround (bright
+   overhead -> mid horizon -> dark floor) studded with a ring of bright softbox
+   PANELS, baked through PMREM. The panels are the point: a glossy part reflects
+   each one as a crisp bright shape (many distinct highlights), while a matte
+   part smears them into a soft wash — so the finish contrast reads at a glance.
+   Fully offline — no HDR file, core three only. */
 function ensureStudioEnv() {
   if (studioEnv.tex || !renderer) return studioEnv.tex;
-  const c = document.createElement("canvas"); c.width = 16; c.height = 256;
+  const W = 1024, H = 512;   // equirectangular (2:1): x = azimuth, y = elevation (top = zenith)
+  const c = document.createElement("canvas"); c.width = W; c.height = H;
   const ctx = c.getContext("2d");
-  const g = ctx.createLinearGradient(0, 0, 0, 256);
-  g.addColorStop(0.00, "#ffffff");   // zenith softbox
-  g.addColorStop(0.25, "#e6e8ea");
-  g.addColorStop(0.55, "#b8bcc0");   // horizon
-  g.addColorStop(0.80, "#6c7075");
-  g.addColorStop(1.00, "#2b2e31");   // floor
-  ctx.fillStyle = g; ctx.fillRect(0, 0, 16, 256);
+
+  // Surround gradient — keeps a smooth top-down irradiance so matte parts still
+  // read even where no panel reflects.
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0.00, "#c8ccd0");   // zenith
+  g.addColorStop(0.22, "#aeb2b6");
+  g.addColorStop(0.52, "#808488");   // horizon
+  g.addColorStop(0.80, "#44484c");
+  g.addColorStop(1.00, "#1b1e21");   // floor
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+  const roundRect = (x, y, w, h, r) => {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  };
+  // A soft-edged bright panel centred on (cx,cy). The blur gives the softbox a
+  // defined-but-feathered edge, which PMREM then grades nicely across roughness.
+  const panel = (cx, cy, w, h, fill) => {
+    ctx.save();
+    ctx.filter = "blur(7px)";   // feather; harmless no-op if a browser lacks canvas filters
+    ctx.fillStyle = fill;
+    roundRect(cx - w / 2, cy - h / 2, w, h, Math.min(w, h) * 0.32);
+    ctx.fill();
+    ctx.restore();
+  };
+
+  panel(W * 0.50, H * 0.13, W * 0.52, H * 0.15, "#ffffff");                  // broad overhead softbox
+  const strips = 6;                                                         // ring of vertical strip lights round the horizon
+  for (let i = 0; i < strips; i++) {
+    const x = ((i + 0.5) / strips) * W;
+    const tall = i % 2 === 0;
+    panel(x, H * 0.43, W * 0.05, H * (tall ? 0.44 : 0.30), i % 3 === 0 ? "#eef1f4" : "#ffffff");
+  }
+  panel(W * 0.17, H * 0.27, W * 0.07, H * 0.09, "#ffffff");                  // small high accents for sparkle
+  panel(W * 0.83, H * 0.25, W * 0.07, H * 0.09, "#ffffff");
+
   const tex = new THREE.CanvasTexture(c);
   tex.mapping = THREE.EquirectangularReflectionMapping;
   if ("sRGBEncoding" in THREE) tex.encoding = THREE.sRGBEncoding;   // colour-manage the source (r137)
@@ -2839,6 +2943,7 @@ function ensureStudioEnv() {
 function setEnvironment(on) {
   LIGHT_LAB.env = on;
   if (scene) scene.environment = on ? ensureStudioEnv() : null;
+  invalidate();   // toggled on boot too (DEV.env), outside any user gesture
 }
 function setEnvIntensity(v) {
   MAT.envIntensity = v; LIGHT_LAB.envIntensity = v;
@@ -2846,23 +2951,41 @@ function setEnvIntensity(v) {
 }
 
 /* Edge overlay: dark crease/silhouette lines drawn over each part — the single
-   biggest aid to reading form. Added as a child mesh so it follows transforms;
-   picking uses non-recursive raycasts, so it never interferes with selection. */
+   biggest aid to reading form. Drawn as fat lines (LineSegments2 / LineMaterial):
+   plain GL lines clamp to 1px on ANGLE/D3D11, so a real, resolution-independent
+   thickness needs the shader-based fat-line pipeline. Added as a child so it
+   follows transforms; picking uses non-recursive raycasts over the part meshes
+   only (LineSegments2 is a Mesh subclass), so it never interferes with selection. */
+const EDGE_WIDTH = 1.6;   // edge-overlay thickness in CSS pixels
+const _edgeRes = new THREE.Vector2();
+function edgeResolution() { if (renderer) renderer.getSize(_edgeRes); return _edgeRes; }
+function updateEdgeResolution() {   // fat-line width is screen-space, so it tracks the canvas size
+  const v = edgeResolution();
+  state.parts.forEach((p) => { const ls = p.mesh.userData.llEdges; if (ls) ls.material.resolution.copy(v); });
+}
 function addPartEdges(mesh) {
   if (mesh.userData.llEdges) { mesh.userData.llEdges.visible = true; return mesh.userData.llEdges; }
   const eg = new THREE.EdgesGeometry(mesh.geometry, 30);   // 30° crease threshold
-  const ls = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: 0x2b3238, transparent: true, opacity: 0.5 }));
+  const lg = new THREE.LineSegmentsGeometry().fromEdgesGeometry(eg);
+  const lm = new THREE.LineMaterial({ color: 0x2b3238, linewidth: EDGE_WIDTH, transparent: true, opacity: 0.5 });
+  lm.clipping = true;                     // ShaderMaterial: required for the section clippingPlanes to apply
+  lm.resolution.copy(edgeResolution());   // screen-space width needs the current drawing-buffer size
+  const ls = new THREE.LineSegments2(lg, lm);
   ls.renderOrder = 3;
+  if (state.section.on) lm.clippingPlanes = [sectionPlane];   // match the live section cut
   mesh.add(ls);
   mesh.userData.llEdges = ls;
   return ls;
 }
 function setEdges(on) {
   LIGHT_LAB.edges = on;
+  state.meta.edgesOn = on;   // persisted view state (round-trips through Save file)
   state.parts.forEach((p) => {
     if (on) addPartEdges(p.mesh);
     else if (p.mesh.userData.llEdges) p.mesh.userData.llEdges.visible = false;
   });
+  syncViewSwitch("swEdges", "swEdgesView", on);   // Light Lab + View panel stay in lockstep
+  invalidate();
 }
 
 function setBg(hex) {
@@ -2881,7 +3004,7 @@ function resetLightLab() {
   });
   if (rimLight) rimLight.position.set(0.2, -0.9, -0.8);
   if (fillLight) fillLight.position.set(-1.1, 0.4, -0.6);
-  applyKeyIntensity(); applyFillIntensity(); applyKeyDirection(); applyShadows();
+  applyKeyIntensity(); applyFillIntensity(); applyKeyDirection(); setShadows(true);
   applyRim(); applyKeyColor(); applyRimColor(); applyHemiColors();
   applyExposure(); applyToneMap(); setBg("#F9FAFA");
   setRoughness(0.6); setMetalness(0.0); setFlatShading(false); setClay(false); setEdges(false);
@@ -2929,7 +3052,7 @@ function copyPreset() {
     `myPreset: { key:${L.key.toFixed(2)}, casterShare:${L.casterShare.toFixed(2)}, fill:${L.fill.toFixed(2)}, ` +
     `rim:${L.rim.toFixed(2)}, az:${Math.round(L.az)}, el:${Math.round(L.el)}, exposure:${L.exposure.toFixed(2)}, ` +
     `tonemap:"${L.tonemap}", bg:"${L.bg}", keyColor:${hex(L.keyColor)}, rimColor:${hex(L.rimColor)}, ` +
-    `hemiSky:${hex(L.hemiSky)}, hemiGround:${hex(L.hemiGround)} },`;
+    `hemiSky:${hex(L.hemiSky)}, hemiGround:${hex(L.hemiGround)}, env:${L.env}, envIntensity:${L.envIntensity.toFixed(2)} },`;
   console.log("[Light Lab] preset entry:\n" + entry);
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(entry).catch(() => {});
   toast("Preset entry copied");
@@ -2996,12 +3119,12 @@ function wireLightLab() {
     applyShadows(); if (!LIGHT_LAB.headlight) applyKeyDirection();   // restore aimed key when leaving headlight
     refreshReadout();
   });
-  toggleRow("ll-shadows", () => { LIGHT_LAB.shadows = !LIGHT_LAB.shadows; $("swShadows").classList.toggle("on", LIGHT_LAB.shadows); applyShadows(); refreshReadout(); });
+  toggleRow("ll-shadows", () => setShadows(!LIGHT_LAB.shadows));
   toggleRow("ll-ground", () => { const on = !LIGHT_LAB.ground; $("swGround").classList.toggle("on", on); setGroundShadow(on); refreshReadout(); });
   toggleRow("ll-spin", () => { const on = !LIGHT_LAB.spin; setLightSpin(on); $("swSpin").classList.toggle("on", LIGHT_LAB.spin); $("swHeadlight").classList.toggle("on", LIGHT_LAB.headlight); refreshReadout(); });
   toggleRow("ll-flat", () => { const on = !LIGHT_LAB.flat; LIGHT_LAB.flat = on; $("swFlat").classList.toggle("on", on); setFlatShading(on); });
   toggleRow("ll-clay", () => { const on = !LIGHT_LAB.clay; $("swClay").classList.toggle("on", on); setClay(on); });
-  toggleRow("ll-edges", () => { const on = !LIGHT_LAB.edges; $("swEdges").classList.toggle("on", on); setEdges(on); });
+  toggleRow("ll-edges", () => setEdges(!LIGHT_LAB.edges));
   toggleRow("ll-env", () => { const on = !LIGHT_LAB.env; $("swEnv").classList.toggle("on", on); setEnvironment(on); refreshReadout(); });
 
   document.querySelectorAll(".ll-tm").forEach((c) => c.addEventListener("click", () => {
@@ -3033,8 +3156,11 @@ function wireUI() {
   $("miRemoveXform").addEventListener("click", () => { closeMenu(); resetAllTransforms(); });
   $("miRemovePart").addEventListener("click", () => { closeMenu(); removeSelectedPart(); });
   $("miRemoveAll").addEventListener("click", () => { closeMenu(); removeAllParts(); });
+  // view panel — orientation chips + display toggles (moved here from the hamburger menu)
   document.querySelectorAll("#oriChips .chip").forEach((c) => c.addEventListener("click", () => { applyUpAxis(c.dataset.axis); setView("iso"); }));
-  $("swGrid").closest(".menu-toggle-row").addEventListener("click", () => setGrid(!state.meta.gridOn));
+  toggleRow("view-grid", () => setGrid(!state.meta.gridOn));
+  toggleRow("view-edges", () => setEdges(!LIGHT_LAB.edges));
+  toggleRow("view-shadows", () => setShadows(!LIGHT_LAB.shadows));
 
   // navigator
   document.querySelectorAll(".viewBtn").forEach((b) => b.addEventListener("click", () => { currentViewName = b.dataset.view; setView(b.dataset.view); }));
