@@ -2622,6 +2622,7 @@ const LIGHT_LAB = {
   keyColor: 0xffffff, rimColor: 0xffffff, hemiSky: 0xffffff, hemiGround: 0x333333,
   headlight: false, shadows: true, ground: false, spin: false,
   env: false, envIntensity: 1.0,
+  contrast: 1.0, saturation: 1.0,   // display colour grade (CSS filter on the canvas)
   rough: 0.6, metal: 0.0, flat: false, clay: false, edges: false,
 };
 const studioEnv = { tex: null };   // LIGHT LAB: cached PMREM env texture (built lazily by ensureStudioEnv)
@@ -2687,7 +2688,7 @@ const LIGHT_PRESETS = {
   // Showroom: high-contrast finish inspector — the studio environment (ring of
   // bright softboxes) ON over a dark background, low fill, so matte vs gloss
   // separates sharply. The only preset that drives the env (via env/envIntensity).
-  showroom:   { key:0.75, casterShare:0.20, fill:0.28, rim:0.22, az:38, el:46, exposure:1.0,  tonemap:"neutral", bg:"#23282d", keyColor:0xffffff, rimColor:0xeaf0f6, hemiSky:0xdfe3e8, hemiGround:0x12151a, env:true, envIntensity:1.4 },
+  showroom:   { key:0.75, casterShare:0.20, fill:0.28, rim:0.22, az:38, el:46, exposure:1.0,  tonemap:"neutral", bg:"#23282d", keyColor:0xffffff, rimColor:0xeaf0f6, hemiSky:0xdfe3e8, hemiGround:0x12151a, env:true, envIntensity:1.4, contrast:1.12, saturation:1.05 },
 };
 
 /* unit direction from azimuth (around up) + elevation (above horizon) */
@@ -2739,6 +2740,16 @@ function setShadows(on) {
   invalidate();
 }
 function applyExposure() { if (renderer) renderer.toneMappingExposure = LIGHT_LAB.exposure; }
+/* Contrast + saturation are a display-side colour grade applied as a CSS filter on
+   the WebGL canvas. It's a compositor effect (no re-render needed) that touches only
+   the canvas, not the CSS2D label/marker DOM in the sibling overlay layer — so labels
+   stay crisp. Exposure above stays a true tone-mapping multiply in the shader. */
+function applyGrade() {
+  if (!renderer) return;
+  const c = LIGHT_LAB.contrast, s = LIGHT_LAB.saturation;
+  const neutral = Math.abs(c - 1) < 1e-3 && Math.abs(s - 1) < 1e-3;
+  renderer.domElement.style.filter = neutral ? "" : `contrast(${c}) saturate(${s})`;
+}
 function applyToneMap() {
   if (!renderer) return;
   renderer.toneMapping = TONEMAPS[LIGHT_LAB.tonemap] || THREE.NoToneMapping;
@@ -2857,6 +2868,11 @@ function applyLightPreset(name) {
   applyKeyIntensity(); applyFillIntensity(); applyKeyDirection();
   applyRim(); applyKeyColor(); applyRimColor(); applyHemiColors();
   applyExposure(); applyToneMap(); setBg(p.bg);
+  // Colour grade is part of a preset's tonal look (like exposure): default to neutral
+  // unless the preset specifies, so switching presets never leaves a stale grade.
+  LIGHT_LAB.contrast = p.contrast != null ? p.contrast : 1.0;
+  LIGHT_LAB.saturation = p.saturation != null ? p.saturation : 1.0;
+  applyGrade();
   // A preset may opt into the studio environment (only Showroom does today);
   // presets that omit the field leave the Environment toggle as the user left it.
   if (p.env !== undefined) { setEnvironment(p.env); if (p.envIntensity != null) setEnvIntensity(p.envIntensity); }
@@ -2999,14 +3015,14 @@ function resetLightLab() {
     key:0.6, casterShare:0.18, fill:0.55, rim:0.28, exposure:1.0, az:35, el:47,
     tonemap:"none", bg:"#F9FAFA", headlight:false, shadows:true, ground:false, spin:false,
     keyColor:0xffffff, rimColor:0xffffff, hemiSky:0xffffff, hemiGround:0x333333,
-    env:false, envIntensity:1.0,
+    env:false, envIntensity:1.0, contrast:1.0, saturation:1.0,
     rough:0.6, metal:0.0, flat:false, clay:false, edges:false,
   });
   if (rimLight) rimLight.position.set(0.2, -0.9, -0.8);
   if (fillLight) fillLight.position.set(-1.1, 0.4, -0.6);
   applyKeyIntensity(); applyFillIntensity(); applyKeyDirection(); setShadows(true);
   applyRim(); applyKeyColor(); applyRimColor(); applyHemiColors();
-  applyExposure(); applyToneMap(); setBg("#F9FAFA");
+  applyExposure(); applyToneMap(); setBg("#F9FAFA"); applyGrade();
   setRoughness(0.6); setMetalness(0.0); setFlatShading(false); setClay(false); setEdges(false);
   setGroundShadow(false); setLightSpin(false);
   setEnvironment(false); setEnvIntensity(1.0);
@@ -3023,7 +3039,7 @@ function refreshReadout() {
   const dirNote = L.headlight ? " (rel. camera)" : "";
   el.textContent =
     `key ${L.key.toFixed(2)}  fill ${L.fill.toFixed(2)}  rim ${L.rim.toFixed(2)}  caster ${L.casterShare.toFixed(2)}\n` +
-    `exposure ${L.exposure.toFixed(2)}  tone ${L.tonemap}\n` +
+    `exposure ${L.exposure.toFixed(2)}  contrast ${L.contrast.toFixed(2)}  sat ${L.saturation.toFixed(2)}  tone ${L.tonemap}\n` +
     `dir az ${Math.round(L.az)}°  el ${Math.round(L.el)}°${dirNote}\n` +
     `shadows ${L.shadows ? "on" : "off"}  ground ${L.ground ? "on" : "off"}  rot-lights ${L.spin ? "on" : "off"}\n` +
     `mat rough ${L.rough.toFixed(2)}  metal ${L.metal.toFixed(2)}  flat ${L.flat ? "on" : "off"}  env ${L.env ? "on" : "off"}`;
@@ -3032,6 +3048,7 @@ function logSetup() {
   const out = {
     lighting: { key: LIGHT_LAB.key, casterShare: LIGHT_LAB.casterShare, fill: LIGHT_LAB.fill,
                 rim: rimLight ? rimLight.intensity : 0, exposure: LIGHT_LAB.exposure, toneMapping: LIGHT_LAB.tonemap,
+                contrast: LIGHT_LAB.contrast, saturation: LIGHT_LAB.saturation,
                 azimuth: LIGHT_LAB.az, elevation: LIGHT_LAB.el, headlight: LIGHT_LAB.headlight,
                 shadows: LIGHT_LAB.shadows, groundShadow: LIGHT_LAB.ground, rotateLights: LIGHT_LAB.spin, background: LIGHT_LAB.bg },
     material: { roughness: LIGHT_LAB.rough, metalness: LIGHT_LAB.metal, flatShading: LIGHT_LAB.flat, clay: LIGHT_LAB.clay, edges: LIGHT_LAB.edges },
@@ -3052,7 +3069,8 @@ function copyPreset() {
     `myPreset: { key:${L.key.toFixed(2)}, casterShare:${L.casterShare.toFixed(2)}, fill:${L.fill.toFixed(2)}, ` +
     `rim:${L.rim.toFixed(2)}, az:${Math.round(L.az)}, el:${Math.round(L.el)}, exposure:${L.exposure.toFixed(2)}, ` +
     `tonemap:"${L.tonemap}", bg:"${L.bg}", keyColor:${hex(L.keyColor)}, rimColor:${hex(L.rimColor)}, ` +
-    `hemiSky:${hex(L.hemiSky)}, hemiGround:${hex(L.hemiGround)}, env:${L.env}, envIntensity:${L.envIntensity.toFixed(2)} },`;
+    `hemiSky:${hex(L.hemiSky)}, hemiGround:${hex(L.hemiGround)}, env:${L.env}, envIntensity:${L.envIntensity.toFixed(2)}, ` +
+    `contrast:${L.contrast.toFixed(2)}, saturation:${L.saturation.toFixed(2)} },`;
   console.log("[Light Lab] preset entry:\n" + entry);
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(entry).catch(() => {});
   toast("Preset entry copied");
@@ -3068,6 +3086,8 @@ function syncLightLabUI() {
   set("llRim", Math.round(LIGHT_LAB.rim * 100));   txt("llRimV", LIGHT_LAB.rim.toFixed(2));
   set("llCaster", Math.round(LIGHT_LAB.casterShare * 100)); txt("llCasterV", LIGHT_LAB.casterShare.toFixed(2));
   set("llExp", Math.round(LIGHT_LAB.exposure * 100)); txt("llExpV", LIGHT_LAB.exposure.toFixed(2));
+  set("llContrast", Math.round(LIGHT_LAB.contrast * 100)); txt("llContrastV", LIGHT_LAB.contrast.toFixed(2));
+  set("llSat", Math.round(LIGHT_LAB.saturation * 100)); txt("llSatV", LIGHT_LAB.saturation.toFixed(2));
   set("llAz", Math.round(LIGHT_LAB.az));   txt("llAzV", Math.round(LIGHT_LAB.az) + "°");
   set("llEl", Math.round(LIGHT_LAB.el));   txt("llElV", Math.round(LIGHT_LAB.el) + "°");
   col("llKeyCol", LIGHT_LAB.keyColor); col("llRimCol", LIGHT_LAB.rimColor);
@@ -3098,6 +3118,8 @@ function wireLightLab() {
   slider("llRim", "llRimV", (v) => { LIGHT_LAB.rim = v / 100; applyRim(); }, (v) => (v / 100).toFixed(2));
   slider("llCaster", "llCasterV", (v) => { LIGHT_LAB.casterShare = v / 100; applyKeyIntensity(); }, (v) => (v / 100).toFixed(2));
   slider("llExp", "llExpV", (v) => { LIGHT_LAB.exposure = v / 100; applyExposure(); }, (v) => (v / 100).toFixed(2));
+  slider("llContrast", "llContrastV", (v) => { LIGHT_LAB.contrast = v / 100; applyGrade(); }, (v) => (v / 100).toFixed(2));
+  slider("llSat", "llSatV", (v) => { LIGHT_LAB.saturation = v / 100; applyGrade(); }, (v) => (v / 100).toFixed(2));
   slider("llAz", "llAzV", (v) => { LIGHT_LAB.az = v; applyKeyDirection(); }, (v) => v + "°");
   slider("llEl", "llElV", (v) => { LIGHT_LAB.el = v; applyKeyDirection(); }, (v) => v + "°");
   slider("llRough", "llRoughV", (v) => { LIGHT_LAB.rough = v / 100; setRoughness(v / 100); }, (v) => (v / 100).toFixed(2));
