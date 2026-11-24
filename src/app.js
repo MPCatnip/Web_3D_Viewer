@@ -390,6 +390,19 @@ function updateShadowCamera(center, radius) {
   if (groundCatcher && groundCatcher.visible) positionGroundCatcher();   // LIGHT LAB: keep the floor under the model
 }
 
+/* Re-fit ONLY the shadow frustum to the model's current extent — no camera change,
+   so it's safe to call after a part move/nudge/place/reset. Without this the frustum
+   keeps the size it had at the last view-fit (load / setView / fitToView); a part
+   dragged past those bounds then casts a clipped shadow until the next reframe. */
+function refitShadowToModel() {
+  if (!shadowLight) return;
+  const box = getWorldBox();
+  if (!box) return;
+  const sphere = box.getBoundingSphere(new THREE.Sphere());
+  updateShadowCamera(sphere.center, sphere.radius || 1);
+  invalidate();
+}
+
 /* Fit-to-view: reframe to the model WITHOUT changing the viewing angle (scale only). */
 function fitToView() {
   const box = getWorldBox();
@@ -965,6 +978,7 @@ function onPartMoveEnd() {
   updateXformResetUI();
   updatePartCoords();
   refreshObjInfo();
+  refitShadowToModel();      // parts moved — resize the shadow frustum to the new extent
   updateGizmoAttachment();   // re-centre + re-zero the multi-select pivot after a drag
 }
 
@@ -1097,6 +1111,7 @@ function afterGroupEdit() {
   refreshMarkers();
   updatePartCoords();
   refreshObjInfo();
+  refitShadowToModel();   // keep the shadow frustum sized to the post-edit extent
   if (xformMode) updateGizmoAttachment();
 }
 
