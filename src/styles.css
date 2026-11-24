@@ -608,6 +608,18 @@ body.editing .info-edit-actions{display:flex}
 }
 /* ===== /LIGHT LAB ===== */
 
+/* ===== BASIC VIEWER (Menu -> Save as basic viewer) =====
+   A view-only presentation build: the saved state carries meta.basic, which boots
+   the body.basic class. Hide all editing chrome (panels, menu, Open, transform bars);
+   keep the model, the navigator, the title and any confidential badge. */
+body.basic .panel,
+body.basic #infoPanel,
+body.basic #xformBar,
+body.basic #xformPanel,
+body.basic #btnImport,
+body.basic #btnMenu,
+body.basic #menu{ display:none !important; }
+
 /* scrollbars */
 ::-webkit-scrollbar{width:9px;height:9px}
 ::-webkit-scrollbar-thumb{background:var(--g3);border-radius:9px;border:2px solid #fff}

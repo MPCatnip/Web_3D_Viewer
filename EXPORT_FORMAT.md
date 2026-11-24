@@ -25,6 +25,7 @@ integration — no other change to the file is needed.
     "upAxis": "z+",                  // z+ z- x+ x- y+ y-   (CAD default = z+)
     "projection": "persp",           // persp | ortho
     "gridOn": false,
+    "basic": false,                  // optional: true = open as a view-only "basic viewer" (panels/menu/Open hidden)
     "panels": {                      // optional: initial expand/collapse per panel
       "tools": true,                 //   true = collapsed, false = expanded
       "objects": false,              //   omit a panel (or the whole object) to keep
@@ -53,6 +54,10 @@ integration — no other change to the file is needed.
     "on": false, "axis": "x", "flip": false,
     "unit": "mm",                    // marks `offsets` as absolute mm (see note)
     "offsets": { "x": null, "y": null, "z": null }   // mm from origin/grid; null = auto-centre
+  },
+  "view": {                          // optional: restore the exact look (else boot defaults + iso framing)
+    "light": { "exposure": 1.0, "tonemap": "neutral", "contrast": 1.0, "saturation": 1.0, "env": false },
+    "camera": { "pos": [120, 90, 120], "target": [0, 0, 0], "zoom": 1, "proj": "persp" }
   }
 }
 ```
@@ -106,6 +111,15 @@ Notes:
   `null` for any axis to auto-centre the cut on the model. For back-compat, older files
   without `unit` are read as 0..1 box fractions (or a single `t`) and converted on load.
   You normally only need `section` when `on` is `true`.
+- **`meta.basic`** (optional) opens the file as a view-only **basic viewer**: all
+  editing chrome (panels, menu, Open, transform bars) is hidden, leaving the model,
+  the navigator and the title. The *Save as basic viewer* menu item sets it.
+- **`view`** (optional) restores the saved look so the file reopens as authored.
+  `view.light` is a `LIGHT_LAB` snapshot (any subset — omitted keys keep defaults:
+  `exposure`, `tonemap`, `contrast`, `saturation`, `env`/`envIntensity`, `bg`, the
+  key/fill/rim intensities and colours, …) and `view.camera` is
+  `{ pos, target, zoom, proj }`. Omit `view` to boot with the built-in lighting and
+  iso framing.
 - Only `meta` + `files` are required. Everything else has sensible defaults.
 
 ## Minimal example (Python)

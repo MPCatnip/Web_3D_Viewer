@@ -438,6 +438,36 @@ function setProjection(mode) {
   $("btnProj").title = mode === "ortho" ? "Orthographic (click for perspective)" : "Perspective (click for orthographic)";
 }
 
+/* Camera round-trip (part of serializeState's `view` block) so a saved viewer
+   reopens at the author's framing instead of snapping back to iso. */
+function captureCamera() {
+  if (!activeCam || !controls) return null;
+  return {
+    pos: activeCam.position.toArray(),
+    target: controls.target.toArray(),
+    zoom: activeCam.zoom,
+    proj: state.meta.projection || "persp",
+  };
+}
+function restoreCamera(c) {
+  if (!c || !c.pos || !activeCam || !controls) return;
+  setProjection(c.proj || "persp");             // swaps the active camera + UI; no reframe
+  const pos = new THREE.Vector3().fromArray(c.pos);
+  perspCam.position.copy(pos); orthoCam.position.copy(pos);   // keep both in sync for later proj toggles
+  if (c.target) controls.target.fromArray(c.target);
+  if (typeof c.zoom === "number") { activeCam.zoom = c.zoom; activeCam.updateProjectionMatrix(); }
+  controls.update();
+  invalidate();
+}
+
+/* "Basic viewer" mode (Menu -> Save as basic viewer): a presentation build with the
+   current look baked in and all editing chrome hidden. Driven purely by the saved
+   state flag — the body class toggles CSS that hides panels / menu / Open / transform
+   bars, leaving the model, the navigator and the title. */
+function applyViewerMode() {
+  document.body.classList.toggle("basic", !!state.meta.basic);
+}
+
 /* ----------------------------------------------------------------------------
    Materials
 ---------------------------------------------------------------------------- */
@@ -2365,6 +2395,10 @@ function serializeState() {
   return {
     v: 1,
     meta: Object.assign({}, state.meta, { panels: capturePanelStates() }),
+    // Current look so a saved (and especially a "basic") viewer opens exactly as
+    // authored. Back-compat: files without `view` fall back to the DEV preset +
+    // iso framing on load (see loadFromState / finishLoad).
+    view: { light: Object.assign({}, LIGHT_LAB), camera: captureCamera() },
     files: state.files.map((f) => ({ id: f.id, name: f.name, format: f.format, enc: f.enc, data: f.data })),
     parts: state.parts.map((p) => {
       const o = { fileId: p.fileId, index: p.index, name: p.name, color: p.color, visible: p.visible };
@@ -2401,10 +2435,12 @@ function serializeState() {
   };
 }
 
-function saveFile() {
+function saveFile(basic) {
   closeMenu();
   if (state.files.length === 0 && !confirm("No models are loaded. Save an empty viewer anyway?")) return;
-  const json = JSON.stringify(serializeState());
+  const data = serializeState();
+  if (basic) data.meta.basic = true;   // open as a stripped presentation viewer (panels/menu/open hidden)
+  const json = JSON.stringify(data);
   // escape so it is safe inside a script text node (avoid literal close-tag / comment-open)
   const safe = json.replace(/<\/script>/gi, "<\\/script>").replace(/<!\-\-/g, "<\\!--");
   // NB: the regex below is written with [<] and backslash-escapes on purpose, so that this
@@ -2415,8 +2451,8 @@ function saveFile() {
     (_, a, _b, c) => a + safe + c
   );
   const name = (state.meta.title || "model").replace(/[^\w\-]+/g, "_");
-  downloadText(name + "_viewer.html", html);
-  toast("Saved standalone viewer");
+  downloadText(name + (basic ? "_basic_viewer.html" : "_viewer.html"), html);
+  toast(basic ? "Saved basic viewer" : "Saved standalone viewer");
 }
 
 function downloadText(filename, text) {
@@ -2433,6 +2469,7 @@ function downloadText(filename, text) {
 function loadFromState(data) {
   showOverlay("loading");
   Object.assign(state.meta, data.meta || {});
+  applyViewerMode();   // hide editing chrome up front (basic viewer) — before panels can flash
   const sec = data.section || {};
   // Offsets are ABSOLUTE mm from the origin / floor grid when `unit==="mm"` (current files).
   // Older files stored 0..1 fractions of the bounding box (per-axis `offsets`, or a single
@@ -2478,6 +2515,8 @@ function loadFromState(data) {
     });
     migrateLegacySectionOffsets();
     finishLoad();
+    // restore the saved look (overrides finishLoad's iso framing + the boot DEV preset)
+    if (data.view) { restoreLight(data.view.light); restoreCamera(data.view.camera); }
     $("secFlip").classList.toggle("active", state.section.flip);
     if (state.section.on) { $("swSection").classList.add("on"); syncChips(".secAxis", "axis", state.section.axis); buildSection(); }
     syncSecSlider();
@@ -2882,6 +2921,23 @@ function applyLightPreset(name) {
   invalidate();   // applied on boot too, outside any user gesture
 }
 
+/* Restore a full saved look (serializeState's view.light snapshot). A superset of
+   applyLightPreset: it also pushes the switches/material knobs the presets leave
+   alone. Runs on load after finishLoad, so it overrides the boot DEV preset. */
+function restoreLight(L) {
+  if (!L) return;
+  Object.assign(LIGHT_LAB, L);
+  applyKeyIntensity(); applyFillIntensity(); applyKeyDirection();
+  applyRim(); applyKeyColor(); applyRimColor(); applyHemiColors();
+  applyExposure(); applyToneMap(); applyGrade(); setBg(LIGHT_LAB.bg);
+  setShadows(LIGHT_LAB.shadows); setGroundShadow(LIGHT_LAB.ground); setLightSpin(LIGHT_LAB.spin);
+  setEnvironment(LIGHT_LAB.env); setEnvIntensity(LIGHT_LAB.envIntensity);
+  setRoughness(LIGHT_LAB.rough); setMetalness(LIGHT_LAB.metal);
+  setFlatShading(LIGHT_LAB.flat); setClay(LIGHT_LAB.clay); setEdges(LIGHT_LAB.edges);
+  syncChips(".ll-preset", "preset", null);   // a restored custom look isn't a named preset
+  syncLightLabUI(); refreshReadout(); invalidate();
+}
+
 /* ---- material knobs ---- */
 function eachPartMaterial(fn) { state.parts.forEach((p) => { matArray(p.mesh).forEach((m, mi) => { if (m) fn(m, p, mi); }); }); }
 function setRoughness(v) { MAT.roughness = v; eachPartMaterial((m, p, mi) => { if (!(p.rough && p.rough[mi] != null)) m.roughness = v; }); refreshReadout(); }
@@ -3168,7 +3224,8 @@ function wireUI() {
   // menu
   $("btnMenu").addEventListener("click", (e) => { e.stopPropagation(); toggleMenu(); });
   document.addEventListener("click", (e) => { if (!$("menu").contains(e.target) && e.target !== $("btnMenu")) closeMenu(); });
-  $("miSave").addEventListener("click", saveFile);
+  $("miSave").addEventListener("click", () => saveFile(false));
+  { const mi = $("miSaveBasic"); if (mi) mi.addEventListener("click", () => saveFile(true)); }
   $("miEdit").addEventListener("click", () => {
     closeMenu(); setEditMode(true); openInfo(true); $("ifTitle").focus();
     toast("Editing \u2014 the name in the top-left is the model title");
