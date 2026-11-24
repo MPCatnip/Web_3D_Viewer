@@ -1337,11 +1337,12 @@ window.addEventListener("keyup", (e) => {
 const SPHERE_PX = 5;
 function worldPerPixel(point) {
   const h = window.innerHeight;
+  if (!(h > 0)) return 0;   // viewport not laid out yet (hidden/offscreen at load): signal "unknown" so callers fall back — never divide by 0 into Infinity
   if (activeCam.isPerspectiveCamera) {
     const d = activeCam.position.distanceTo(point);
     return (2 * Math.tan((activeCam.fov * Math.PI / 180) / 2) * d) / h;
   }
-  return ((orthoCam.top - orthoCam.bottom) / orthoCam.zoom) / h;
+  return ((orthoCam.top - orthoCam.bottom) / (orthoCam.zoom || 1)) / h;
 }
 const _wp = new THREE.Vector3();
 function updateMarkerScales() {
@@ -1501,7 +1502,16 @@ function defaultLabelLocal(localAnchor) {
   markerRoot.localToWorld(_aw.copy(localAnchor));
   _cr.setFromMatrixColumn(activeCam.matrixWorld, 0);   // camera right (world)
   _cu.setFromMatrixColumn(activeCam.matrixWorld, 1);   // camera up    (world)
-  const wpp = worldPerPixel(_aw) || 1;
+  let wpp = worldPerPixel(_aw);
+  if (!(wpp > 0)) {
+    // Viewport/camera not ready (e.g. an annotation restored on load before first
+    // layout): scale the 72/54px offset to the model so the callout still lands
+    // sensibly — and, crucially, stays finite (a non-finite wpp would NaN the leader
+    // line's endpoint and break bounding-sphere/culling for the whole marker).
+    const box = getWorldBox();
+    const span = box ? box.getSize(new THREE.Vector3()).length() : 1;
+    wpp = (span || 1) / 900;
+  }
   const lpWorld = _aw.clone()
     .add(_cr.multiplyScalar(wpp * 72))
     .add(_cu.multiplyScalar(wpp * 54));
